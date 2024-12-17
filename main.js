@@ -2,11 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const {
-  blockPresetUrls,
   isBlocklistApplied,
   addCustomUrl,
   removeCustomUrl,
   setupPermissions,
+  appendBlocklist,
 } = require("./backend/hostsHandler");
 
 let mainWindow;
@@ -56,11 +56,10 @@ app.on("ready", () => {
   mainWindow = new BrowserWindow({
     width: 1250,
     height: 800,
-    resizable: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: false,
       contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
@@ -77,10 +76,14 @@ app.on("ready", () => {
   mainWindow.loadFile(path.join(__dirname, "renderer/index.html"));
 });
 
-// Handle "Block Haram Content" request
+// IPC: Start blocking haram content
 ipcMain.on("block-haram-content", (event) => {
-  blockPresetUrls((success, message) => {
-    event.reply("block-haram-success", { success, message });
+  appendBlocklist(event, (success, message) => {
+    if (success) {
+      console.log("Blocklist applied successfully.");
+    } else {
+      console.error("Error applying blocklist:", message);
+    }
   });
 });
 
@@ -120,6 +123,16 @@ ipcMain.on("remove-custom-url", (event, url) => {
       event.reply("update-custom-list", customUrls);
     }
     event.reply("notify", { success, message });
+  });
+});
+
+// Handle undo blocklist
+ipcMain.on("undo-blocklist", (event) => {
+  undoBlocklist((success, message) => {
+    event.reply("notify", { success, message });
+    if (success) {
+      mainWindow.webContents.send("check-haram-status", false);
+    }
   });
 });
 

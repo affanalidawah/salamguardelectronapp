@@ -190,3 +190,11 @@ ul li button:hover {
 #modal-close:hover {
   background: #4cd8b5;
 }
+
+#modal-progress-bar {
+  width: 100%;
+  margin-top: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #eee;
+}

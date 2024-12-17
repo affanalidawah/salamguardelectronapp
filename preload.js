@@ -19,6 +19,14 @@ contextBridge.exposeInMainWorld("electron", {
   onUpdateCustomList: (callback) =>
     ipcRenderer.on("update-custom-list", (_, args) => callback(args)),
   blockHaramContent: () => ipcRenderer.send("block-haram-content"),
+  onUpdateProgress: (callback) =>
+    ipcRenderer.on("update-progress", (_, current, total) =>
+      callback(current, total)
+    ),
+  onBlocklistSuccess: (callback) =>
+    ipcRenderer.on("blocklist-success", (_, message) => callback(message)),
+  onBlocklistError: (callback) =>
+    ipcRenderer.on("blocklist-error", (_, message) => callback(message)),
   onBlockHaramSuccess: (callback) =>
     ipcRenderer.on("block-haram-success", (_, args) => callback(args)),
   onCheckHaramStatus: (callback) =>
@@ -26,4 +34,5 @@ contextBridge.exposeInMainWorld("electron", {
   receiveInitialConfig: (callback) =>
     ipcRenderer.on("initial-config", (_, config) => callback(config)),
   setupPermissions: () => ipcRenderer.send("setup-permissions"),
+  undoBlocklist: () => ipcRenderer.send("undo-blocklist"),
 });

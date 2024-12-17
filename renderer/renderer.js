@@ -10,6 +10,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const modal = document.getElementById("modal");
   const modalMessage = document.getElementById("modal-message");
   const modalClose = document.getElementById("modal-close");
+  const undoButton = document.getElementById("undo-blocklist");
+
+  // Progress bar elements
+  let modalProgressBar;
+
+  // Event: Undo Blocklist
+  undoButton?.addEventListener("click", () => {
+    showModal("Undoing blocklist...");
+    window.electron.undoBlocklist();
+  });
+
+  // Check if websites are blocked
+  window.electron.onCheckHaramStatus((blocked) => {
+    isHaramBlocked = blocked;
+    updateUI();
+  });
 
   // Check for required elements
   if (!blockSection || !setupStatus) {
@@ -21,35 +37,77 @@ document.addEventListener("DOMContentLoaded", () => {
   let isPermissionsGranted = false;
   let isHaramBlocked = false;
 
-  // Utility: Show Modal Notification
-  function showModal(message) {
+  // Utility: Show Modal Notification with Progress Bar Option
+  function showModal(message, showProgress = false) {
     modalMessage.textContent = message;
+
+    if (showProgress) {
+      // Add a progress bar dynamically if not already added
+      if (!modalProgressBar) {
+        modalProgressBar = document.createElement("progress");
+        modalProgressBar.id = "modal-progress-bar";
+        modalProgressBar.value = 0;
+        modalProgressBar.max = 100;
+        modalMessage.insertAdjacentElement("afterend", modalProgressBar);
+      }
+      modalProgressBar.classList.remove("hidden");
+    } else {
+      if (modalProgressBar) modalProgressBar.classList.add("hidden");
+    }
+
     modal.classList.remove("hidden");
+  }
+
+  // Utility: Update Progress Bar
+  function updateProgressBar(current, total) {
+    if (modalProgressBar) {
+      modalProgressBar.value = Math.round((current / total) * 100);
+    }
   }
 
   // Close Modal
   modalClose.addEventListener("click", () => {
     modal.classList.add("hidden");
+    if (modalProgressBar) modalProgressBar.classList.add("hidden");
   });
 
   // Update UI based on state
   function updateUI() {
     if (isPermissionsGranted) {
       setupStatus.innerHTML = `
-        <div class="success-message">
-          <span class="checkmark">✔</span>
-          <h2>Permissions have been successfully granted.</h2>
-        </div>
-      `;
+      <div class="success-message">
+        <span class="checkmark">✔</span>
+        <h2>Permissions have been successfully granted.</h2>
+      </div>
+    `;
     }
 
     if (isHaramBlocked) {
       blockSection.innerHTML = `
-        <div class="success-message">
-          <span class="checkmark">✔</span>
-          <h2>Haram content is blocked on this computer.</h2>
-        </div>
-      `;
+      <div class="success-message">
+        <span class="checkmark">✔</span>
+        <h2>Haram content is blocked on this computer.</h2>
+        <button id="undo-blocklist">Undo Blocking</button>
+      </div>
+    `;
+
+      // Attach the event listener to the new "Undo Blocking" button
+      document
+        .getElementById("undo-blocklist")
+        ?.addEventListener("click", () => {
+          showModal("Undoing blocklist...");
+          window.electron.undoBlocklist();
+        });
+    } else {
+      blockSection.innerHTML = `
+      <h2>Block Haram Content</h2>
+      <button id="block-haram">Block Haram Content</button>
+    `;
+
+      document.getElementById("block-haram")?.addEventListener("click", () => {
+        showModal("Blocking haram content... This might take a while.", true);
+        window.electron.blockHaramContent();
+      });
     }
   }
 
@@ -95,11 +153,42 @@ document.addEventListener("DOMContentLoaded", () => {
   function refreshCustomList() {
     window.electron.getCustomList();
   }
-
-  // Event: Block Haram Content
   blockButton?.addEventListener("click", () => {
-    showModal("Blocking haram content...");
+    showModal("Blocking haram content... This might take a while.", true);
     window.electron.blockHaramContent();
+  });
+
+  // Listen for progress updates
+  window.electron.onUpdateProgress((current, total) => {
+    updateProgressBar(current, total);
+  });
+
+  // Listen for success
+  window.electron.onBlocklistSuccess((message) => {
+    modalMessage.textContent = message;
+    modalProgressBar.classList.add("hidden");
+  });
+
+  // Listen for errors
+  window.electron.onBlocklistError((error) => {
+    modalMessage.textContent = error;
+    modalProgressBar.classList.add("hidden");
+  });
+
+  // Listen for progress updates
+  window.electron.on("update-progress", (current, total) => {
+    updateProgressBar(current, total);
+  });
+
+  // Listen for blocking completion
+  window.electron.onBlockHaramSuccess((response) => {
+    modal.classList.add("hidden");
+    if (response.success) {
+      showBlockedMessage();
+      showModal("✔ Haram content has been successfully blocked.");
+    } else {
+      showModal(`❌ Error: ${response.message}`);
+    }
   });
 
   // Event: Setup Permissions

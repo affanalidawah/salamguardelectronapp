@@ -7,11 +7,11 @@
     "start": "electron ."
   },
   "dependencies": {
+    "cli-progress": "^3.12.0",
     "electron": "^26.2.0",
-    "sudo-prompt": "^9.2.1",
-    "fs-extra": "^11.1.1"
+    "fs-extra": "^11.1.1",
+    "sudo-prompt": "^9.2.1"
   },
-  "devDependencies": {},
   "author": "Your Name",
   "license": "MIT"
 }
