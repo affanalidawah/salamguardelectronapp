@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>SalamGuard - Website Blocker</title>
+  </head>
+  <body>
+    <header>
+      <div class="logo-container">
+        <img src="../assets/shield-icon.svg" alt="Shield Icon" class="logo" />
+        <h1>SalamGuard</h1>
+      </div>
+    </header>
+
+    <main id="app">
+      <!-- Top Rectangles -->
+      <div class="grid-container">
+        <section class="rectangle" id="block-section">
+          <h2>Block Haram Content</h2>
+          <button id="block-haram">Block Haram Content</button>
+        </section>
+        <section class="rectangle" id="setup-status">
+          <h2>Grant Permissions</h2>
+          <button id="setup-permissions">Setup Permissions</button>
+        </section>
+      </div>
+
+      <!-- Custom URL Blocking Section -->
+      <section id="custom-block-section">
+        <h2>Custom URL Blocking</h2>
+        <p>Add or remove websites you want to block.</p>
+        <div class="input-container">
+          <input
+            type="text"
+            id="custom-url"
+            placeholder="Enter a website URL"
+          />
+          <button id="add-url">Add URL</button>
+        </div>
+        <ul id="custom-list"></ul>
+      </section>
+    </main>
+
+    <!-- Modal -->
+    <div id="modal" class="hidden">
+      <div class="modal-content">
+        <span id="modal-message"></span>
+        <button id="modal-close">Close</button>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

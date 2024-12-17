@@ -1,0 +1,192 @@
+/* Main styling for SalamGuard main page */
+body {
+  font-family: "Arial", sans-serif;
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(135deg, #1a3b61, #0d1f33);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+header {
+  width: 100%;
+  padding: 20px;
+  text-align: center;
+  background: rgba(26, 59, 97, 0.9);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.logo {
+  width: 50px;
+  height: 50px;
+}
+
+main {
+  max-width: 1200px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+  margin-top: 20px;
+  position: relative;
+}
+
+.rectangle {
+  background: #2a5078;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s, background-color 0.3s;
+}
+
+.rectangle:hover {
+  transform: scale(1.05);
+  background: #3c6991;
+}
+
+button {
+  background: #61ebce;
+  border: none;
+  color: #0d1f33;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background: #4cd8b5;
+}
+
+#status-message {
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 5px;
+  background: #3c6991;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+#custom-block-section {
+  margin-top: 30px;
+  background: rgba(42, 80, 120, 0.8);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  width: 100%;
+}
+
+.input-container {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+input[type="text"] {
+  flex: 1;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #0d1f33;
+  outline: none;
+  transition: border 0.3s;
+}
+
+input[type="text"]:focus {
+  border: 1px solid #61ebce;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin-top: 20px;
+}
+
+ul li {
+  background: #2a5078;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+ul li button {
+  background: #eb6161;
+  color: #ffffff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+ul li button:hover {
+  background: #d85555;
+}
+
+/* Modal styles */
+.hidden {
+  display: none !important;
+}
+
+#modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  color: #333; /* Set text color to a contrasting dark color */
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+#modal-message {
+  font-size: 18px;
+  color: #000; /* Explicitly set text color for modal message */
+  margin-bottom: 10px;
+}
+
+#modal-close {
+  padding: 10px 20px;
+  background: #61ebce;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  color: #fff; /* Ensure button text is readable */
+}
+
+#modal-close:hover {
+  background: #4cd8b5;
+}

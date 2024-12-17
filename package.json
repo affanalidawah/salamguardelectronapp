@@ -1,0 +1,17 @@
+{
+  "name": "block-websites",
+  "version": "1.0.0",
+  "description": "An Electron app for blocking websites via the hosts file.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^26.2.0",
+    "sudo-prompt": "^9.2.1",
+    "fs-extra": "^11.1.1"
+  },
+  "devDependencies": {},
+  "author": "Your Name",
+  "license": "MIT"
+}
