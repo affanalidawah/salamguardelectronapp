@@ -16,10 +16,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let modalProgressBar;
 
   // Event: Undo Blocklist
-  undoButton?.addEventListener("click", () => {
-    showModal("Undoing blocklist...");
-    window.electron.undoBlocklist();
-  });
+  // undoButton?.addEventListener("click", () => {
+  //   showModal("Undoing blocklist...");
+  //   window.electron.undoBlocklist();
+  // });
 
   // Check if websites are blocked
   window.electron.onCheckHaramStatus((blocked) => {
@@ -28,10 +28,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Check for required elements
-  if (!blockSection || !setupStatus) {
-    console.error("Critical elements not found in the DOM.");
-    return;
-  }
+  // if (!blockSection || !setupStatus) {
+  //   console.error("Critical elements not found in the DOM.");
+  //   return;
+  // }
 
   // State Variables
   let isPermissionsGranted = false;
@@ -73,14 +73,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Update UI based on state
   function updateUI() {
-    if (isPermissionsGranted) {
-      setupStatus.innerHTML = `
-      <div class="success-message">
-        <span class="checkmark">✔</span>
-        <h2>Permissions have been successfully granted.</h2>
-      </div>
-    `;
-    }
+    // if (isPermissionsGranted) {
+    //   setupStatus.innerHTML = `
+    //   <div class="success-message">
+    //     <span class="checkmark">✔</span>
+    //     <h2>Permissions have been successfully granted.</h2>
+    //   </div>
+    // `;
+    // }
 
     if (isHaramBlocked) {
       blockSection.innerHTML = `
@@ -112,10 +112,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Handle Permission Setup Success
-  function showSetupSuccess() {
-    isPermissionsGranted = true;
-    updateUI();
-  }
+  // function showSetupSuccess() {
+  //   isPermissionsGranted = true;
+  //   updateUI();
+  // }
 
   // Handle Haram Content Block Success
   function showBlockedMessage() {
@@ -192,10 +192,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Event: Setup Permissions
-  setupButton?.addEventListener("click", () => {
-    showModal("Setting up permissions...");
-    window.electron.setupPermissions();
-  });
+  // setupButton?.addEventListener("click", () => {
+  //   showModal("Setting up permissions...");
+  //   window.electron.setupPermissions();
+  // });
 
   // Event: Add Custom URL
   addButton.addEventListener("click", () => {
@@ -235,7 +235,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load initial configuration
   window.electron.receiveInitialConfig((config) => {
-    if (config.permissionsGranted) showSetupSuccess();
+    // if (config.permissionsGranted) showSetupSuccess();
     if (config.haramBlocked) showBlockedMessage();
   });
 

@@ -132,46 +132,46 @@ const flushDNSCache = (callback) => {
 };
 
 // Undo the blocklist by removing content between markers
-const undoBlocklist = (callback) => {
-  fs.readFile(hostsPath, "utf-8", (err, data) => {
-    if (err) return callback(false, "Failed to read the hosts file.");
+// const undoBlocklist = (callback) => {
+//   fs.readFile(hostsPath, "utf-8", (err, data) => {
+//     if (err) return callback(false, "Failed to read the hosts file.");
 
-    const updatedContent = data.replace(
-      new RegExp(`${markerStart}[\\s\\S]*?${markerEnd}`, "g"),
-      ""
-    );
-    writeSafelyToHosts(
-      updatedContent,
-      callback,
-      "Blocklist removed successfully."
-    );
-  });
-};
+//     const updatedContent = data.replace(
+//       new RegExp(`${markerStart}[\\s\\S]*?${markerEnd}`, "g"),
+//       ""
+//     );
+//     writeSafelyToHosts(
+//       updatedContent,
+//       callback,
+//       "Blocklist removed successfully."
+//     );
+//   });
+// };
 
 // Remove blocklist by re-creating hosts file without blocklist entries
-const removeBlocklist = (callback) => {
-  fs.readFile(hostsPath, "utf-8", (err, data) => {
-    if (err) return callback(false, "Failed to read the hosts file.");
+// const removeBlocklist = (callback) => {
+//   fs.readFile(hostsPath, "utf-8", (err, data) => {
+//     if (err) return callback(false, "Failed to read the hosts file.");
 
-    const updatedContent = data.replace(/127\.0\.0\.1\s+\S+\n?/g, "");
+//     const updatedContent = data.replace(/127\.0\.0\.1\s+\S+\n?/g, "");
 
-    const tempFile = path.join(require("os").tmpdir(), "hosts_cleaned.txt");
-    fs.writeFileSync(tempFile, updatedContent);
+//     const tempFile = path.join(require("os").tmpdir(), "hosts_cleaned.txt");
+//     fs.writeFileSync(tempFile, updatedContent);
 
-    const overwriteCommand =
-      process.platform === "win32"
-        ? `copy "${tempFile}" "${hostsPath}" && ipconfig /flushdns && del "${tempFile}"`
-        : `sudo cp "${tempFile}" "${hostsPath}" && dscacheutil -flushcache && killall -HUP mDNSResponder && rm "${tempFile}"`;
+//     const overwriteCommand =
+//       process.platform === "win32"
+//         ? `copy "${tempFile}" "${hostsPath}" && ipconfig /flushdns && del "${tempFile}"`
+//         : `sudo cp "${tempFile}" "${hostsPath}" && dscacheutil -flushcache && killall -HUP mDNSResponder && rm "${tempFile}"`;
 
-    sudo.exec(overwriteCommand, { name: "SalamGuard" }, (error) => {
-      if (error) {
-        console.error("Failed to remove blocklist:", error);
-        return callback(false, "Failed to clean the hosts file.");
-      }
-      callback(true, "Blocklist removed successfully.");
-    });
-  });
-};
+//     sudo.exec(overwriteCommand, { name: "SalamGuard" }, (error) => {
+//       if (error) {
+//         console.error("Failed to remove blocklist:", error);
+//         return callback(false, "Failed to clean the hosts file.");
+//       }
+//       callback(true, "Blocklist removed successfully.");
+//     });
+//   });
+// };
 
 // Safely write content to the hosts file using sudo
 const writeSafelyToHosts = (
@@ -265,7 +265,7 @@ module.exports = {
   removeCustomUrl,
   blockPresetUrls: (callback) => appendBlocklist(readBlocklist(), callback),
   isBlocklistApplied,
-  undoBlocklist,
+  // undoBlocklist,
   appendBlocklist,
-  removeBlocklist,
+  // removeBlocklist,
 };
