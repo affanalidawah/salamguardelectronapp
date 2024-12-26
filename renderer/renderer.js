@@ -2,24 +2,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // DOM Elements
   const blockButton = document.getElementById("block-haram");
   const addButton = document.getElementById("add-url");
-  const setupButton = document.getElementById("setup-permissions");
-  const setupStatus = document.getElementById("setup-status");
   const customList = document.getElementById("custom-list");
   const customUrlInput = document.getElementById("custom-url");
   const blockSection = document.getElementById("block-section");
   const modal = document.getElementById("modal");
   const modalMessage = document.getElementById("modal-message");
   const modalClose = document.getElementById("modal-close");
-  const undoButton = document.getElementById("undo-blocklist");
 
   // Progress bar elements
   let modalProgressBar;
-
-  // Event: Undo Blocklist
-  // undoButton?.addEventListener("click", () => {
-  //   showModal("Undoing blocklist...");
-  //   window.electron.undoBlocklist();
-  // });
 
   // Check if websites are blocked
   window.electron.onCheckHaramStatus((blocked) => {
@@ -28,13 +19,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Check for required elements
-  // if (!blockSection || !setupStatus) {
-  //   console.error("Critical elements not found in the DOM.");
-  //   return;
-  // }
+  if (!blockSection) {
+    console.error("Critical elements not found in the DOM.");
+    return;
+  }
 
   // State Variables
-  let isPermissionsGranted = false;
   let isHaramBlocked = false;
 
   // Utility: Show Modal Notification with Progress Bar Option
@@ -73,15 +63,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Update UI based on state
   function updateUI() {
-    // if (isPermissionsGranted) {
-    //   setupStatus.innerHTML = `
-    //   <div class="success-message">
-    //     <span class="checkmark">✔</span>
-    //     <h2>Permissions have been successfully granted.</h2>
-    //   </div>
-    // `;
-    // }
-
     if (isHaramBlocked) {
       blockSection.innerHTML = `
       <div class="success-message">
@@ -111,12 +92,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Handle Permission Setup Success
-  // function showSetupSuccess() {
-  //   isPermissionsGranted = true;
-  //   updateUI();
-  // }
-
   // Handle Haram Content Block Success
   function showBlockedMessage() {
     isHaramBlocked = true;
@@ -125,8 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Validate URL
   function validateDomain(domain) {
-    // Regex to validate domain names (e.g., youtube.com, example.org)
-    const domainRegex = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)\.[A-Za-z]{2,}$/;
+    const domainRegex = /^(?!:\/\/)(www\.)?[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+$/;
     return domainRegex.test(domain);
   }
 
@@ -176,7 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Listen for progress updates
-  window.electron.on("update-progress", (current, total) => {
+  window.electron.onUpdateProgress((current, total) => {
     updateProgressBar(current, total);
   });
 
@@ -191,29 +165,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Event: Setup Permissions
-  // setupButton?.addEventListener("click", () => {
-  //   showModal("Setting up permissions...");
-  //   window.electron.setupPermissions();
-  // });
-
   // Event: Add Custom URL
   addButton.addEventListener("click", () => {
     const domain = customUrlInput.value.trim();
 
     if (!validateDomain(domain)) {
-      console.log("Invalid domain entered:", domain);
-      showModal(
-        "❌ Please enter a valid domain in the format websitename.com (e.g., youtube.com)."
-      );
+      console.error("Invalid domain entered:", domain);
+      showModal("❌ Please enter a valid domain (e.g., youtube.com).");
       return;
     }
 
-    console.log("Adding domain to hosts file:", domain);
-
-    // Automatically add plain and www. versions to the list
+    console.log("Sending domain to main process:", domain);
     window.electron.addCustomUrl(domain);
-
     customUrlInput.value = ""; // Clear input
   });
 
@@ -235,12 +198,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load initial configuration
   window.electron.receiveInitialConfig((config) => {
-    // if (config.permissionsGranted) showSetupSuccess();
     if (config.haramBlocked) showBlockedMessage();
   });
 
   // Update custom URL list
   window.electron.onUpdateCustomList((customUrls) => {
+    console.log("Received updated custom URL list:", customUrls); // Debug log
     renderCustomUrls(customUrls);
   });
 

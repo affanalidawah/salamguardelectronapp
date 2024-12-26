@@ -33,6 +33,4 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.on("check-haram-status", (_, status) => callback(status)),
   receiveInitialConfig: (callback) =>
     ipcRenderer.on("initial-config", (_, config) => callback(config)),
-  // setupPermissions: () => ipcRenderer.send("setup-permissions"),
-  // undoBlocklist: () => ipcRenderer.send("undo-blocklist"),
 });

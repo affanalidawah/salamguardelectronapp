@@ -5,43 +5,21 @@ const {
   isBlocklistApplied,
   addCustomUrl,
   removeCustomUrl,
-  setupPermissions,
   appendBlocklist,
 } = require("./backend/hostsHandler");
 
+const {
+  ensureFileExists,
+  readJsonFile,
+  writeJsonFile,
+  customUrlsPath,
+} = require("./utils");
+
 let mainWindow;
 const configPath = path.join(app.getPath("userData"), "config.json");
-const customUrlsPath = path.join(__dirname, "customUrls.json");
-
-// Ensure required files exist with default values
-function ensureFileExists(filePath, defaultValue) {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2));
-  }
-}
-
-// Read and parse JSON file with error handling
-function readJsonFile(filePath) {
-  try {
-    ensureFileExists(filePath, []);
-    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-  } catch (err) {
-    console.error(`Error reading JSON file at ${filePath}:`, err);
-    return [];
-  }
-}
-
-// Write to JSON file with error handling
-function writeJsonFile(filePath, data) {
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-  } catch (err) {
-    console.error(`Error writing to JSON file at ${filePath}:`, err);
-  }
-}
 
 ensureFileExists(customUrlsPath, []);
-ensureFileExists(configPath, { permissionsGranted: false });
+ensureFileExists(configPath);
 
 function readConfig() {
   return readJsonFile(configPath);
@@ -67,6 +45,8 @@ app.on("ready", () => {
   mainWindow.webContents.on("did-finish-load", () => {
     const config = readConfig();
     mainWindow.webContents.send("initial-config", config);
+    const customUrls = readJsonFile(customUrlsPath);
+    mainWindow.webContents.send("update-custom-list", customUrls); // Send initial list
 
     isBlocklistApplied((blocked) => {
       mainWindow.webContents.send("check-haram-status", blocked);
@@ -80,36 +60,29 @@ app.on("ready", () => {
 ipcMain.on("block-haram-content", (event) => {
   appendBlocklist(event, (success, message) => {
     if (success) {
-      console.log("Blocklist applied successfully.");
+      isBlocklistApplied((blocked) => {
+        event.reply("check-haram-status", blocked);
+      });
     } else {
-      console.error("Error applying blocklist:", message);
+      event.reply("blocklist-error", message);
     }
-  });
-});
-
-// Handle permission setup
-ipcMain.on("setup-permissions", (event) => {
-  setupPermissions((success, message) => {
-    if (success) {
-      updateConfig({ permissionsGranted: true });
-    }
-    event.reply("notify", { success, message });
   });
 });
 
 // Handle adding a custom URL
 ipcMain.on("add-custom-url", (event, url) => {
+  console.log("Received request to add URL:", url);
+
   addCustomUrl(url, (success, message) => {
-    event.reply("notify", { success, message });
+    console.log("Add custom URL result:", { success, message });
 
     if (success) {
       const customUrls = readJsonFile(customUrlsPath);
-      if (!customUrls.includes(url)) {
-        customUrls.push(url);
-        writeJsonFile(customUrlsPath, customUrls);
-      }
-      event.reply("update-custom-list", customUrls);
+      console.log("Updated custom URLs after addition:", customUrls);
+      event.reply("update-custom-list", customUrls); // Notify the renderer
     }
+
+    event.reply("notify", { success, message });
   });
 });
 
@@ -123,16 +96,6 @@ ipcMain.on("remove-custom-url", (event, url) => {
       event.reply("update-custom-list", customUrls);
     }
     event.reply("notify", { success, message });
-  });
-});
-
-// Handle undo blocklist
-ipcMain.on("undo-blocklist", (event) => {
-  undoBlocklist((success, message) => {
-    event.reply("notify", { success, message });
-    if (success) {
-      mainWindow.webContents.send("check-haram-status", false);
-    }
   });
 });
 

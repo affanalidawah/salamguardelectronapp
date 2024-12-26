@@ -10,6 +10,7 @@ const hostsPath =
 const blocklistPath = path.join(__dirname, "../assets/preset-blocklist.txt");
 const markerStart = "# SalamGuard Blocklist Start";
 const markerEnd = "# SalamGuard Blocklist End";
+const { readJsonFile, writeJsonFile, customUrlsPath } = require("../utils");
 
 // Helper to read preset blocklist
 const readBlocklist = () => {
@@ -28,7 +29,10 @@ const isBlocklistApplied = (callback) => {
       console.error("Error reading hosts file:", err);
       return callback(false);
     }
-    callback(data.includes(markerStart) && data.includes(markerEnd));
+    const startFound = data.includes(markerStart);
+    const endFound = data.includes(markerEnd);
+
+    callback(startFound && endFound);
   });
 };
 
@@ -115,83 +119,23 @@ const executeAppendCommand = (tempFile, callback, event) => {
   });
 };
 
-// Helper to flush DNS cache
-const flushDNSCache = (callback) => {
-  const flushCommand =
-    process.platform === "win32"
-      ? "ipconfig /flushdns"
-      : "dscacheutil -flushcache && killall -HUP mDNSResponder";
-
-  sudo.exec(flushCommand, { name: "SalamGuard" }, (error) => {
-    if (error) {
-      console.error("Failed to flush DNS cache:", error);
-      return callback(false, "Failed to flush DNS cache.");
-    }
-    callback(true, "DNS cache flushed successfully.");
-  });
-};
-
-// Undo the blocklist by removing content between markers
-// const undoBlocklist = (callback) => {
-//   fs.readFile(hostsPath, "utf-8", (err, data) => {
-//     if (err) return callback(false, "Failed to read the hosts file.");
-
-//     const updatedContent = data.replace(
-//       new RegExp(`${markerStart}[\\s\\S]*?${markerEnd}`, "g"),
-//       ""
-//     );
-//     writeSafelyToHosts(
-//       updatedContent,
-//       callback,
-//       "Blocklist removed successfully."
-//     );
-//   });
-// };
-
-// Remove blocklist by re-creating hosts file without blocklist entries
-// const removeBlocklist = (callback) => {
-//   fs.readFile(hostsPath, "utf-8", (err, data) => {
-//     if (err) return callback(false, "Failed to read the hosts file.");
-
-//     const updatedContent = data.replace(/127\.0\.0\.1\s+\S+\n?/g, "");
-
-//     const tempFile = path.join(require("os").tmpdir(), "hosts_cleaned.txt");
-//     fs.writeFileSync(tempFile, updatedContent);
-
-//     const overwriteCommand =
-//       process.platform === "win32"
-//         ? `copy "${tempFile}" "${hostsPath}" && ipconfig /flushdns && del "${tempFile}"`
-//         : `sudo cp "${tempFile}" "${hostsPath}" && dscacheutil -flushcache && killall -HUP mDNSResponder && rm "${tempFile}"`;
-
-//     sudo.exec(overwriteCommand, { name: "SalamGuard" }, (error) => {
-//       if (error) {
-//         console.error("Failed to remove blocklist:", error);
-//         return callback(false, "Failed to clean the hosts file.");
-//       }
-//       callback(true, "Blocklist removed successfully.");
-//     });
-//   });
-// };
-
 // Safely write content to the hosts file using sudo
 const writeSafelyToHosts = (
   content,
   callback,
   successMessage = "Hosts file updated successfully."
 ) => {
-  const tempFile = path.join(__dirname, "temp_hosts_update.txt");
+  const tempFile = path.join(require("os").tmpdir(), "temp_hosts_update.txt");
 
   try {
     fs.writeFileSync(tempFile, content);
+    console.log("Temporary file created:", tempFile); // Debug log
   } catch (err) {
     console.error("Error writing to temp file:", err);
     return callback(false, "Failed to prepare the updated hosts file.");
   }
 
-  const command =
-    process.platform === "win32"
-      ? `copy "${tempFile}" "${hostsPath}"`
-      : `cp "${tempFile}" "${hostsPath}"`;
+  const command = `cp "${tempFile}" "${hostsPath}"`;
 
   sudo.exec(command, { name: "SalamGuard" }, (error) => {
     fs.unlinkSync(tempFile); // Cleanup temp file
@@ -203,37 +147,56 @@ const writeSafelyToHosts = (
   });
 };
 
-// Grant permissions to the hosts file
-const setupPermissions = (callback) => {
-  const command =
-    process.platform === "win32"
-      ? `icacls "${hostsPath}" /grant ${process.env.USERNAME}:F`
-      : `chmod 666 "${hostsPath}"`;
+// Add a custom URL to the hosts file
+const addCustomUrl = (url, callback) => {
+  if (!url) {
+    console.error("Invalid URL provided.");
+    return callback(false, "Invalid URL provided.");
+  }
 
-  console.log("Setting up permissions for hosts file...");
-  sudo.exec(command, { name: "SalamGuard" }, (error) => {
-    if (error) {
-      console.error("Permission setup failed:", error);
-      return callback(false, "Failed to grant permissions.");
+  const cleanDomain = url.replace(/^www\./, "").trim();
+  const entries = [`127.0.0.1 ${cleanDomain}`, `127.0.0.1 www.${cleanDomain}`];
+
+  console.log("Adding entries to hosts file:", entries);
+
+  fs.readFile(hostsPath, "utf-8", (err, data) => {
+    if (err) {
+      console.error("Failed to read the hosts file:", err);
+      return callback(false, "Failed to read the hosts file.");
     }
-    callback(true, "Permissions granted successfully.");
+
+    if (data.includes(`127.0.0.1 ${cleanDomain}`)) {
+      console.log("Domain already exists in the hosts file:", cleanDomain);
+      return callback(false, "URL already exists in the hosts file.");
+    }
+
+    const updatedHosts = `${data.trim()}\n${entries.join("\n")}\n`;
+
+    writeSafelyToHosts(updatedHosts, (success, message) => {
+      console.log("Write to hosts file result:", { success, message });
+      if (success) {
+        updateCustomUrls(cleanDomain, callback); // Add this!
+      } else {
+        callback(false, "Failed to update hosts file.");
+      }
+    });
   });
 };
 
-// Add a custom URL to the hosts file
-const addCustomUrl = (url, callback) => {
-  if (!url) return callback(false, "Invalid URL provided.");
+const updateCustomUrls = (url, callback) => {
+  const customUrls = readJsonFile(customUrlsPath);
 
-  const cleanDomain = url.replace(/^www\./, "");
-  const entries = [`127.0.0.1 ${cleanDomain}`, `127.0.0.1 www.${cleanDomain}`];
+  console.log("Before updating custom URLs:", customUrls);
 
-  fs.readFile(hostsPath, "utf-8", (err, data) => {
-    if (err) return callback(false, "Failed to read the hosts file.");
-    if (data.includes(`127.0.0.1 ${cleanDomain}`)) {
-      return callback(false, "URL already exists in the hosts file.");
-    }
-    writeSafelyToHosts(`${data.trim()}\n${entries.join("\n")}\n`, callback);
-  });
+  if (!customUrls.includes(url)) {
+    customUrls.push(url);
+    console.log("Adding URL to customUrls.json:", url);
+    writeJsonFile(customUrlsPath, customUrls);
+  } else {
+    console.log("URL already exists in customUrls.json:", url);
+  }
+
+  callback(true, "Custom URL added successfully.");
 };
 
 // Remove a custom URL from the hosts file
@@ -260,12 +223,9 @@ const removeCustomUrl = (url, callback) => {
 };
 
 module.exports = {
-  setupPermissions,
   addCustomUrl,
   removeCustomUrl,
   blockPresetUrls: (callback) => appendBlocklist(readBlocklist(), callback),
   isBlocklistApplied,
-  // undoBlocklist,
   appendBlocklist,
-  // removeBlocklist,
 };
