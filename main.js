@@ -2,10 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const { app, BrowserWindow, ipcMain } = require("electron");
 const {
-  isBlocklistApplied,
   addCustomUrl,
   removeCustomUrl,
   appendBlocklist,
+  checkBlocklistIntegrity,
 } = require("./backend/hostsHandler");
 
 const {
@@ -21,13 +21,23 @@ const configPath = path.join(app.getPath("userData"), "config.json");
 ensureFileExists(customUrlsPath, []);
 ensureFileExists(configPath);
 
-function readConfig() {
-  return readJsonFile(configPath);
-}
+function readConfig(callback) {
+  const defaultConfig = { haramBlocked: false }; // Default configuration
 
-function updateConfig(updates) {
-  const config = readConfig();
-  writeJsonFile(configPath, { ...config, ...updates });
+  // Ensure config file exists with correct default values
+  ensureFileExists(configPath, defaultConfig);
+
+  // Read the current config
+  const config = readJsonFile(configPath);
+
+  // Dynamically check the blocklist status and update the config
+  checkBlocklistIntegrity((blocked) => {
+    config.haramBlocked = blocked; // Update the value dynamically
+    writeJsonFile(configPath, config); // Save the updated config
+    if (callback) callback(config); // Pass updated config to callback if needed
+  });
+
+  return config;
 }
 
 app.on("ready", () => {
@@ -43,28 +53,50 @@ app.on("ready", () => {
 
   // Send initial config and haram status to the renderer
   mainWindow.webContents.on("did-finish-load", () => {
-    const config = readConfig();
-    mainWindow.webContents.send("initial-config", config);
+    readConfig((updatedConfig) => {
+      mainWindow.webContents.send("initial-config", updatedConfig); // Send updated config
+    });
     const customUrls = readJsonFile(customUrlsPath);
     mainWindow.webContents.send("update-custom-list", customUrls); // Send initial list
 
-    isBlocklistApplied((blocked) => {
-      mainWindow.webContents.send("check-haram-status", blocked);
-    });
+    // checkBlocklistIntegrity((blocked) => {
+    //   mainWindow.webContents.send("check-haram-status", blocked);
+    // });
   });
 
   mainWindow.loadFile(path.join(__dirname, "renderer/index.html"));
+});
+
+ipcMain.on("check-blocklist-integrity", (event) => {
+  checkBlocklistIntegrity((isValid, result) => {
+    event.reply("blocklist-integrity-status", isValid, result);
+  });
+});
+
+ipcMain.on("rewrite-hosts", (event) => {
+  const blocklist = readBlocklist();
+  const customUrls = readJsonFile(customUrlsPath);
+  const content = [
+    markerStart,
+    ...blocklist.map((url) => `127.0.0.1 ${url}`),
+    ...customUrls.map((url) => `127.0.0.1 ${url}`),
+    markerEnd,
+  ].join("\n");
+
+  writeSafelyToHosts(content, (success, message) => {
+    event.reply("rewrite-hosts-result", success, message);
+  });
 });
 
 // IPC: Start blocking haram content
 ipcMain.on("block-haram-content", (event) => {
   appendBlocklist(event, (success, message) => {
     if (success) {
-      isBlocklistApplied((blocked) => {
-        event.reply("check-haram-status", blocked);
+      checkBlocklistIntegrity((blocked) => {
+        event.reply("block-haram-success", { success: true, blocked });
       });
     } else {
-      event.reply("blocklist-error", message);
+      event.reply("block-haram-success", { success: false, message });
     }
   });
 });

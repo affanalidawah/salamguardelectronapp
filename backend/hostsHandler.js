@@ -12,6 +12,58 @@ const markerStart = "# SalamGuard Blocklist Start";
 const markerEnd = "# SalamGuard Blocklist End";
 const { readJsonFile, writeJsonFile, customUrlsPath } = require("../utils");
 
+const specificUrls = [
+  "exampleadultsite.com",
+  "0006666.net",
+  "pornhub.com",
+  "redtube.com",
+  "xhamster.com",
+  "youporn.com",
+  "xvideos.com",
+];
+
+const checkBlocklistIntegrity = (callback) => {
+  fs.readFile(hostsPath, "utf-8", (err, data) => {
+    if (err) {
+      console.error("Error reading hosts file:", err);
+      return callback(false, { error: "Failed to read hosts file." });
+    }
+
+    // console.log("Hosts file content:", data);
+
+    const startFound = data.includes(markerStart);
+    const endFound = data.includes(markerEnd);
+    const urlsFound = specificUrls.every((url) =>
+      data.includes(`127.0.0.1 ${url}`)
+    );
+
+    if (startFound && endFound && urlsFound) {
+      // Case 3: Comments and specific URLs are there
+      callback(true, {
+        status: 3,
+        message: "✔ Haram content is successfully blocked.",
+      });
+    } else if (startFound && endFound && !urlsFound) {
+      // Case 1: Comments are there, but specific URLs are not
+      callback(false, {
+        status: 1,
+        message: "Blocklist markers exist, but specific URLs are missing.",
+      });
+    } else if (!startFound && !endFound && urlsFound) {
+      // Case 2: Comments are not there, but specific URLs are
+      callback(false, {
+        status: 2,
+        message: "Specific URLs found, but blocklist markers are missing.",
+      });
+    } else {
+      // Case 4: Neither comments nor specific URLs are there
+      callback(false, {
+        status: 4,
+        message: "No blocklist or specific URLs found.",
+      });
+    }
+  });
+};
 // Helper to read preset blocklist
 const readBlocklist = () => {
   try {
@@ -20,20 +72,6 @@ const readBlocklist = () => {
     console.error("Failed to read blocklist:", error);
     return [];
   }
-};
-
-// Check if the blocklist is already applied
-const isBlocklistApplied = (callback) => {
-  fs.readFile(hostsPath, "utf-8", (err, data) => {
-    if (err) {
-      console.error("Error reading hosts file:", err);
-      return callback(false);
-    }
-    const startFound = data.includes(markerStart);
-    const endFound = data.includes(markerEnd);
-
-    callback(startFound && endFound);
-  });
 };
 
 // Append blocklist and clean up invalid entries
@@ -59,7 +97,7 @@ const appendBlocklist = (event, callback) => {
   const totalEntries = cleanedEntries.length;
   let currentProgress = 0;
 
-  fs.writeFileSync(tempFile, ""); // Start with an empty temp file
+  fs.writeFileSync(tempFile, `${markerStart}\n`); // Write start marker to temp file
 
   const batchSize = 500;
   let currentBatch = 0;
@@ -85,6 +123,7 @@ const appendBlocklist = (event, callback) => {
     if (currentBatch * batchSize < totalEntries) {
       setImmediate(writeBatch);
     } else {
+      fs.appendFileSync(tempFile, `${markerEnd}\n`); // Write end marker after all entries
       executeAppendCommand(tempFile, callback, event);
     }
   };
@@ -224,8 +263,8 @@ const removeCustomUrl = (url, callback) => {
 
 module.exports = {
   addCustomUrl,
+  checkBlocklistIntegrity,
   removeCustomUrl,
   blockPresetUrls: (callback) => appendBlocklist(readBlocklist(), callback),
-  isBlocklistApplied,
   appendBlocklist,
 };

@@ -3,7 +3,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electron", {
-  // setupPermissions: () => ipcRenderer.send("setup-permissions"),
   blockPresetUrls: () => ipcRenderer.send("block-preset-urls"),
   addCustomUrl: (url) => {
     console.log("Preload: Received URL to add:", url); // Debug log
@@ -33,4 +32,14 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.on("check-haram-status", (_, status) => callback(status)),
   receiveInitialConfig: (callback) =>
     ipcRenderer.on("initial-config", (_, config) => callback(config)),
+  checkBlocklistIntegrity: () => ipcRenderer.send("check-blocklist-integrity"),
+  onBlocklistIntegrityStatus: (callback) =>
+    ipcRenderer.on("blocklist-integrity-status", (_, isValid, result) =>
+      callback(isValid, result)
+    ),
+  rewriteHosts: () => ipcRenderer.send("rewrite-hosts"),
+  onRewriteHostsResult: (callback) =>
+    ipcRenderer.on("rewrite-hosts-result", (_, success, message) =>
+      callback(success, message)
+    ),
 });
