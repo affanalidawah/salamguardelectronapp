@@ -165,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (result.status === 3) {
           isHaramBlocked = true; // Update state to blocked
-          showModal("✔ Haram content has been successfully blocked.");
+          showModal("✔ Successfully blocked over 80,000 websites.");
         } else {
           isHaramBlocked = false; // Update state to unblocked
           showModal("❌ Error: Blocklist integrity check failed.");

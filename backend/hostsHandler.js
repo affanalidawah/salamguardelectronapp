@@ -1,13 +1,16 @@
 const fs = require("fs");
 const path = require("path");
 const sudo = require("sudo-prompt");
+const axios = require("axios");
 
 const hostsPath =
   process.platform === "win32"
     ? "C:\\Windows\\System32\\drivers\\etc\\hosts"
     : "/etc/hosts";
 
-const blocklistPath = path.join(__dirname, "../assets/preset-blocklist.txt");
+const githubBlocklistUrl =
+  "https://raw.githubusercontent.com/4skinSkywalker/Anti-Porn-HOSTS-File/refs/heads/master/HOSTS.txt";
+
 const markerStart = "# SalamGuard Blocklist Start";
 const markerEnd = "# SalamGuard Blocklist End";
 const { readJsonFile, writeJsonFile, customUrlsPath } = require("../utils");
@@ -64,22 +67,38 @@ const checkBlocklistIntegrity = (callback) => {
     }
   });
 };
-// Helper to read preset blocklist
-const readBlocklist = () => {
+
+// Fetch blocklist from GitHub
+const fetchBlocklistFromGitHub = async () => {
   try {
-    return fs.readFileSync(blocklistPath, "utf-8").trim().split("\n");
+    const response = await axios.get(githubBlocklistUrl);
+    return response.data
+      .split("\n")
+      .filter(
+        (line) =>
+          line.trim() && // Ignore empty lines
+          !line.startsWith("#") && // Ignore comments
+          !line.startsWith("0.0.0.0 target.com") &&
+          line.startsWith("0.0.0.0") // Ignore already formatted entries
+      )
+      .map((line) => line.trim());
   } catch (error) {
-    console.error("Failed to read blocklist:", error);
+    console.error("Failed to fetch blocklist from GitHub:", error);
     return [];
   }
 };
 
 // Append blocklist and clean up invalid entries
-const appendBlocklist = (event, callback) => {
-  const blocklist = fs.readFileSync(blocklistPath, "utf-8").trim().split("\n");
+const appendBlocklist = async (event, callback) => {
+  const githubBlocklist = await fetchBlocklistFromGitHub();
+
+  // Ensure "exampleadultsite.com" is included
+  if (!githubBlocklist.includes("exampleadultsite.com")) {
+    githubBlocklist.push("exampleadultsite.com");
+  }
 
   // Clean up entries: Ignore IPs like 0.0.0.0 and extract only domains
-  const cleanedEntries = blocklist
+  const cleanedEntries = githubBlocklist
     .map((line) => {
       const parts = line.split(/\s+/); // Split line by spaces
       if (parts.length === 2) return parts[1]; // If "0.0.0.0 domain.com", get the domain
