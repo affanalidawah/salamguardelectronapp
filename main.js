@@ -6,7 +6,9 @@ const {
   removeCustomUrl,
   appendBlocklist,
   checkBlocklistIntegrity,
+  writeSafelyToHosts,
 } = require("./backend/hostsHandler");
+const axios = require("axios");
 
 const {
   ensureFileExists,
@@ -15,30 +17,14 @@ const {
   customUrlsPath,
 } = require("./utils");
 
+const githubBlocklistUrl =
+  "https://raw.githubusercontent.com/4skinSkywalker/Anti-Porn-HOSTS-File/refs/heads/master/HOSTS.txt";
+
 let mainWindow;
 const configPath = path.join(app.getPath("userData"), "config.json");
 
 ensureFileExists(customUrlsPath, []);
 ensureFileExists(configPath);
-
-function readConfig(callback) {
-  const defaultConfig = { haramBlocked: false }; // Default configuration
-
-  // Ensure config file exists with correct default values
-  ensureFileExists(configPath, defaultConfig);
-
-  // Read the current config
-  const config = readJsonFile(configPath);
-
-  // Dynamically check the blocklist status and update the config
-  checkBlocklistIntegrity((blocked) => {
-    config.haramBlocked = blocked; // Update the value dynamically
-    writeJsonFile(configPath, config); // Save the updated config
-    if (callback) callback(config); // Pass updated config to callback if needed
-  });
-
-  return config;
-}
 
 app.on("ready", () => {
   mainWindow = new BrowserWindow({
@@ -50,6 +36,62 @@ app.on("ready", () => {
       nodeIntegration: false,
     },
   });
+
+  const fetchBlocklistFromGitHub = async () => {
+    try {
+      const response = await axios.get(githubBlocklistUrl);
+      const listarray = response.data
+        .split("\n")
+        .filter(
+          (line) =>
+            line.trim() && // Ignore empty lines
+            !line.startsWith("#") && // Ignore comments
+            !line.startsWith("0.0.0.0    target.com") &&
+            line.startsWith("0.0.0.0") // Ignore already formatted entries
+        )
+        .map((line) => line.trim());
+      listarray.push("exampleadultsite.com");
+      return listarray;
+    } catch (error) {
+      console.error("Failed to fetch blocklist from GitHub:", error);
+      return []; // Return an empty array on error
+    }
+  };
+
+  // Handle IPC request for blocklist
+  ipcMain.handle("get-blocklist", async () => {
+    return await fetchBlocklistFromGitHub();
+  });
+
+  ipcMain.handle("read-hosts-file", async () => {
+    try {
+      const hostsPath = path.resolve("/etc/hosts"); // Use `C:\\Windows\\System32\\drivers\\etc\\hosts` for Windows
+      const hostsContent = fs.readFileSync(hostsPath, "utf-8");
+      return hostsContent;
+    } catch (error) {
+      console.error("Error reading hosts file:", error);
+      throw error;
+    }
+  });
+
+  function readConfig(callback) {
+    const defaultConfig = { haramBlocked: false }; // Default configuration
+
+    // Ensure config file exists with correct default values
+    ensureFileExists(configPath, defaultConfig);
+
+    // Read the current config
+    const config = readJsonFile(configPath);
+
+    // Dynamically check the blocklist status and update the config
+    checkBlocklistIntegrity((blocked) => {
+      config.haramBlocked = blocked; // Update the value dynamically
+      writeJsonFile(configPath, config); // Save the updated config
+      if (callback) callback(config); // Pass updated config to callback if needed
+    });
+
+    return config;
+  }
 
   // Send initial config and haram status to the renderer
   mainWindow.webContents.on("did-finish-load", () => {
@@ -73,16 +115,7 @@ ipcMain.on("check-blocklist-integrity", (event) => {
   });
 });
 
-ipcMain.on("rewrite-hosts", (event) => {
-  const blocklist = readBlocklist();
-  const customUrls = readJsonFile(customUrlsPath);
-  const content = [
-    markerStart,
-    ...blocklist.map((url) => `127.0.0.1 ${url}`),
-    ...customUrls.map((url) => `127.0.0.1 ${url}`),
-    markerEnd,
-  ].join("\n");
-
+ipcMain.on("rewrite-hosts", (event, content) => {
   writeSafelyToHosts(content, (success, message) => {
     event.reply("rewrite-hosts-result", success, message);
   });

@@ -3,6 +3,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electron", {
+  readHostsFile: async () => ipcRenderer.invoke("read-hosts-file"),
+  getBlocklistUrls: async () => ipcRenderer.invoke("get-blocklist"),
   blockPresetUrls: () => ipcRenderer.send("block-preset-urls"),
   addCustomUrl: (url) => {
     console.log("Preload: Received URL to add:", url); // Debug log
@@ -37,9 +39,12 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.on("blocklist-integrity-status", (_, isValid, result) =>
       callback(isValid, result)
     ),
-  rewriteHosts: () => ipcRenderer.send("rewrite-hosts"),
-  onRewriteHostsResult: (callback) =>
-    ipcRenderer.on("rewrite-hosts-result", (_, success, message) =>
-      callback(success, message)
-    ),
+  rewriteHosts: (content) => {
+    ipcRenderer.send("rewrite-hosts", content);
+  },
+  onRewriteHostsResult: (callback) => {
+    ipcRenderer.on("rewrite-hosts-result", (event, success, message) => {
+      callback(success, message);
+    });
+  },
 });

@@ -32,13 +32,29 @@ const checkBlocklistIntegrity = (callback) => {
       return callback(false, { error: "Failed to read hosts file." });
     }
 
-    // console.log("Hosts file content:", data);
-
     const startFound = data.includes(markerStart);
     const endFound = data.includes(markerEnd);
-    const urlsFound = specificUrls.every((url) =>
-      data.includes(`127.0.0.1 ${url}`)
-    );
+    // Split data into lines and trim whitespace
+    const dataLines = data
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim());
+
+    const urlsFound = specificUrls.every((url) => {
+      const entry1 = `127.0.0.1 ${url}`;
+      const entry2 = `0.0.0.0 ${url}`;
+
+      // Check each line for an exact match
+      const found = dataLines.some(
+        (line) => line === entry1 || line === entry2
+      );
+
+      if (!found) {
+        console.log(`URL not found: ${url}`);
+        console.log(`Checking for: '${entry1}' or '${entry2}'`);
+      }
+
+      return found;
+    });
 
     if (startFound && endFound && urlsFound) {
       // Case 3: Comments and specific URLs are there
@@ -48,21 +64,24 @@ const checkBlocklistIntegrity = (callback) => {
       });
     } else if (startFound && endFound && !urlsFound) {
       // Case 1: Comments are there, but specific URLs are not
+      console.log("Blocklist markers exist, but specific URLs are missing.");
       callback(false, {
         status: 1,
-        message: "Blocklist markers exist, but specific URLs are missing.",
+        message: "Your Blocklist needs an update.",
       });
     } else if (!startFound && !endFound && urlsFound) {
       // Case 2: Comments are not there, but specific URLs are
+      console.log("Specific URLs found, but blocklist markers are missing.");
       callback(false, {
         status: 2,
-        message: "Specific URLs found, but blocklist markers are missing.",
+        message: "Your Blocklist needs fixing.",
       });
-    } else {
+    } else if (!startFound && !endFound && !urlsFound) {
       // Case 4: Neither comments nor specific URLs are there
+      console.log("No blocklist or specific URLs found.");
       callback(false, {
         status: 4,
-        message: "No blocklist or specific URLs found.",
+        message: "Your computer is unprotected.",
       });
     }
   });
@@ -72,16 +91,18 @@ const checkBlocklistIntegrity = (callback) => {
 const fetchBlocklistFromGitHub = async () => {
   try {
     const response = await axios.get(githubBlocklistUrl);
-    return response.data
+    const listarray = response.data
       .split("\n")
       .filter(
         (line) =>
           line.trim() && // Ignore empty lines
           !line.startsWith("#") && // Ignore comments
-          !line.startsWith("0.0.0.0 target.com") &&
+          !line.startsWith("0.0.0.0    target.com") &&
           line.startsWith("0.0.0.0") // Ignore already formatted entries
       )
       .map((line) => line.trim());
+    listarray.push("exampleadultsite.com");
+    return listarray;
   } catch (error) {
     console.error("Failed to fetch blocklist from GitHub:", error);
     return [];
@@ -183,6 +204,11 @@ const writeSafelyToHosts = (
   callback,
   successMessage = "Hosts file updated successfully."
 ) => {
+  if (typeof content !== "string") {
+    console.error("Invalid content provided to writeSafelyToHosts:", content);
+    return callback(false, "Invalid content provided.");
+  }
+
   const tempFile = path.join(require("os").tmpdir(), "temp_hosts_update.txt");
 
   try {
@@ -230,6 +256,10 @@ const addCustomUrl = (url, callback) => {
 
     const updatedHosts = `${data.trim()}\n${entries.join("\n")}\n`;
 
+    console.log(
+      "sent content from hostsHandler.js 258 to writeSafelyToHosts:",
+      updatedHosts
+    );
     writeSafelyToHosts(updatedHosts, (success, message) => {
       console.log("Write to hosts file result:", { success, message });
       if (success) {
@@ -272,6 +302,10 @@ const removeCustomUrl = (url, callback) => {
       )
       .join("\n");
 
+    console.log(
+      "sent content from hostsHandler.js 304 to writeSafelyToHosts:",
+      updatedContent
+    );
     writeSafelyToHosts(
       updatedContent,
       callback,
@@ -286,4 +320,6 @@ module.exports = {
   removeCustomUrl,
   blockPresetUrls: (callback) => appendBlocklist(readBlocklist(), callback),
   appendBlocklist,
+  fetchBlocklistFromGitHub,
+  writeSafelyToHosts,
 };
