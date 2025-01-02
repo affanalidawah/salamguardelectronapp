@@ -49,7 +49,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let modalProgressBar;
 
   // Utility: Show Modal Notification with Progress Bar Option
-  function showModal(message, showProgress = false) {
+  let isLoading = false;
+
+  function showModal(message, showProgress = false, hideCloseButton = false) {
+    isLoading = true; // Set loading state to true
     modalMessage.textContent = message;
     if (showProgress) {
       if (!modalProgressBar) {
@@ -63,8 +66,22 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       modalProgressBar?.classList.add("hidden");
     }
+
+    // Control the visibility of the close button
+    if (hideCloseButton) {
+      modalClose.classList.add("hidden");
+    } else {
+      modalClose.classList.remove("hidden");
+    }
+
     modal.classList.remove("hidden");
   }
+
+  const closeModal = () => {
+    isLoading = false; // Set loading state to false
+    modal.classList.add("hidden");
+    modal.classList.remove("show-progress");
+  };
 
   // Utility: Update Progress Bar
   function updateProgressBar(current, total) {
@@ -112,13 +129,14 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       renderBlockSection(
         false,
-        message || "Block Haram Content",
+        message || "Haram content is not blocked on this computer.",
         action || {
           buttonId: "block-haram",
           buttonText: "Block Haram Content",
           onClick: () => {
             showModal(
               "Blocking haram content... Please enter your password.",
+              true,
               true
             );
             window.electron.blockHaramContent();
@@ -191,11 +209,32 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Electron IPC Handlers
-  window.electron.onUpdateProgress(updateProgressBar);
   window.electron.onBlocklistSuccess((message) => {
-    modalMessage.textContent = message;
-    modalProgressBar?.classList.add("hidden");
+    console.log("Blocklist append success received. Message:", message);
+
+    // Show progress modal while rechecking
+    showModal("Rescanning your computer...", true, true);
+
+    // Trigger integrity check
+    window.electron.checkBlocklistIntegrity();
+
+    // Handle integrity check result
+    window.electron.onBlocklistIntegrityStatus((isValid, result) => {
+      console.log("Blocklist integrity status after appending:", result);
+
+      const statusMessage =
+        result.status === 3
+          ? "✔ Successfully blocked over 80,000 websites."
+          : "❌ Blocklist update incomplete.";
+
+      // Update UI before showing modal
+      updateUI(result.status === 3, result.message || statusMessage);
+
+      // Show modal after updating the UI
+      showModal(statusMessage, false);
+    });
   });
+
   window.electron.onBlocklistError((error) => {
     modalMessage.textContent = error;
     modalProgressBar?.classList.add("hidden");
@@ -215,10 +254,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (result.status === 3) {
           isHaramBlocked = true; // Update state to blocked
-          showModal("✔ Successfully blocked over 80,000 websites.");
+          showModal("Your computer is now protected.");
         } else {
           isHaramBlocked = false; // Update state to unblocked
-          showModal("❌ Error: Blocklist integrity check failed.");
+          showModal(
+            "❌ Error: We were unable to secure your computer. Please try again or contact us for help."
+          );
         }
 
         updateUI(); // Reflect the new state in the UI
@@ -237,11 +278,19 @@ document.addEventListener("DOMContentLoaded", () => {
     isHaramBlocked = config.haramBlocked;
   });
 
+  const setLoadingState = (isLoading) => {
+    const loadingIndicator = document.getElementById("loading-indicator");
+    if (isLoading) {
+      loadingIndicator.classList.remove("hidden");
+    } else {
+      loadingIndicator.classList.add("hidden");
+    }
+  };
+
   // Check Blocklist Integrity
   window.electron.checkBlocklistIntegrity();
   window.electron.onBlocklistIntegrityStatus((isValid, result) => {
     console.log("Blocklist integrity check triggered:");
-    console.log("Is valid:", isValid);
     console.log("Result object:", JSON.stringify(result, null, 2));
 
     // Default fallback message
@@ -254,32 +303,80 @@ document.addEventListener("DOMContentLoaded", () => {
       case 3:
         isHaramBlocked = true; // Blocklist markers and specific URLs are present
         updateUI(true, message);
-        console.log("Mission Success!");
+        closeModal(); // Ensure modal closes after UI is updated
+        console.log("Mission Success! Case 3");
         break;
       case 1:
+        // Case 1: Blocklist needs rewriting
+        isHaramBlocked = false;
+        updateUI(false, message, {
+          buttonId: "rewrite-blocklist",
+          buttonText: "Update Blocklist",
+          onClick: async () => {
+            showModal("Blocking more sites... please wait", true, true);
+            try {
+              const response = await updateHostsFile();
+              showModal("✔ Successfully updated blocklist.", false);
+              updateUI(
+                true,
+                response.message || "Blocklist updated successfully."
+              );
+            } catch (error) {
+              showModal(`❌ Error: ${error.message}`, false);
+            } finally {
+              closeModal();
+            }
+          },
+        });
+        console.log("We need to rewrite hosts!");
+        break;
       case 2:
         isHaramBlocked = false; // Blocklist needs rewriting
         updateUI(false, message, {
           buttonId: "rewrite-blocklist",
-          buttonText: "Update Required",
-          onClick: () => {
-            showModal("Blocking sites... please wait", true);
-            rewriteHostsFile(true); // Pass flag to preserve specific URLs
+          buttonText: "Update Blocklist",
+          onClick: async () => {
+            setLoadingState(true); // Show loading indicator
+
+            try {
+              const response = await rewriteHostsFile(true); // Perform async operation
+              updateUI(
+                true,
+                response.message || "Blocklist updated successfully."
+              );
+            } catch (error) {
+              updateUI(false, `Error: ${error.message}`);
+            } finally {
+              setLoadingState(false); // Hide loading indicator
+            }
           },
         });
         console.log("We need to rewrite hosts!");
         break;
       default:
-        isHaramBlocked = false; // Default case
-        updateUI(false, "Block Haram Content", {
+        // Default case: No protection
+        isHaramBlocked = false;
+        updateUI(false, "Haram content is not blocked on this computer.", {
           buttonId: "block-haram",
           buttonText: "Block Haram Content",
-          onClick: () => {
+          onClick: async () => {
             showModal(
-              "Blocking haram content... please enter your password.",
+              "Blocking haram content... Please enter your password.",
+              true,
               true
             );
-            window.electron.blockHaramContent();
+            try {
+              const response = await window.electron.blockHaramContent();
+              showModal("✔ Successfully blocked haram content.", false);
+              updateUI(
+                true,
+                response.message || "Blocklist updated successfully."
+              );
+            } catch (error) {
+              showModal(`❌ Error: ${error.message}`, false);
+            } finally {
+              closeModal();
+            }
           },
         });
         break;
@@ -287,122 +384,207 @@ document.addEventListener("DOMContentLoaded", () => {
 
     console.log("isHaramBlocked state:", isHaramBlocked);
   });
-
   async function rewriteHostsFile(preserveUrls) {
+    try {
+      const BLOCKLIST_START = "# SalamGuard Blocklist Start";
+      const BLOCKLIST_END = "# SalamGuard Blocklist End";
+      const CORRECT_FORMAT_PREFIX = "127.0.0.1";
+
+      let newHostsContent;
+
+      if (preserveUrls) {
+        const currentHostsContent = await getHostsContent();
+        const currentHosts = currentHostsContent
+          .split("\n")
+          .map((line) => line.trim());
+
+        const blocklistUrls = await fetchAndDisplayBlocklist();
+
+        const blocklistDomains = new Set(
+          blocklistUrls
+            .map((line) => {
+              const parts = line.split(/\s+/);
+              return parts.length > 1 ? parts[1] : null;
+            })
+            .filter(Boolean)
+        );
+
+        const expandedBlocklistUrls = new Set();
+        const existingBlocklistUrls = new Set(
+          currentHosts
+            .filter((line) => line.startsWith(CORRECT_FORMAT_PREFIX))
+            .map((line) => {
+              const parts = line.split(/\s+/);
+              return parts.length > 1 ? parts[1] : null;
+            })
+            .filter(Boolean)
+        );
+
+        const normalizeDomain = (domain) => domain.replace(/^www\./, "");
+
+        blocklistDomains.forEach((domain) => {
+          if (!domain) return;
+
+          const normalizedDomain = normalizeDomain(domain);
+          const wwwDomain = `www.${normalizedDomain}`;
+
+          if (!existingBlocklistUrls.has(normalizedDomain)) {
+            expandedBlocklistUrls.add(
+              `${CORRECT_FORMAT_PREFIX} ${normalizedDomain}`
+            );
+          }
+          if (!existingBlocklistUrls.has(wwwDomain)) {
+            expandedBlocklistUrls.add(`${CORRECT_FORMAT_PREFIX} ${wwwDomain}`);
+          }
+        });
+
+        const nonBlocklistUrls = [];
+        currentHosts.forEach((line) => {
+          const normalizedLine = line.replace(/\s+/g, " ").trim();
+          const [ip, domain] = normalizedLine.split(" ");
+
+          if (!domain || normalizedLine.startsWith("#")) {
+            nonBlocklistUrls.push(line);
+          } else if (
+            blocklistDomains.has(domain) ||
+            blocklistDomains.has(normalizeDomain(domain))
+          ) {
+            // Skip existing blocklist entries
+          } else {
+            nonBlocklistUrls.push(line);
+          }
+        });
+
+        const blocklistSection = [
+          BLOCKLIST_START,
+          ...Array.from(expandedBlocklistUrls),
+          BLOCKLIST_END,
+        ].join("\n");
+
+        newHostsContent = [...nonBlocklistUrls, blocklistSection].join("\n");
+      } else {
+        const blocklistUrls = await fetchAndDisplayBlocklist();
+        const blocklistSection = [
+          BLOCKLIST_START,
+          ...blocklistUrls.map(
+            (line) => `${CORRECT_FORMAT_PREFIX} ${line.replace(/^www\\./, "")}`
+          ),
+          BLOCKLIST_END,
+        ].join("\n");
+
+        newHostsContent = blocklistSection;
+      }
+
+      // Send the new hosts content to the IPC handler
+      return new Promise((resolve, reject) => {
+        window.electron.rewriteHosts(newHostsContent, (success, response) => {
+          if (success) {
+            resolve(response);
+          } else {
+            reject(
+              new Error(response.message || "Failed to rewrite hosts file.")
+            );
+          }
+        });
+      });
+    } catch (error) {
+      console.error("Error in rewriteHostsFile:", error);
+      throw new Error("Failed to rewrite the hosts file.");
+    }
+  }
+
+  async function updateHostsFile() {
     const BLOCKLIST_START = "# SalamGuard Blocklist Start";
     const BLOCKLIST_END = "# SalamGuard Blocklist End";
     const CORRECT_FORMAT_PREFIX = "127.0.0.1";
 
-    if (preserveUrls) {
+    const normalizeDomain = (domain) => domain.replace(/^www\./, "");
+
+    try {
+      // Fetch current hosts file content
       const currentHostsContent = await getHostsContent();
       const currentHosts = currentHostsContent
         .split("\n")
         .map((line) => line.trim());
-      console.log("currentHosts array:", currentHosts);
 
+      // Fetch updated blocklist
       const blocklistUrls = await fetchAndDisplayBlocklist();
-      console.log("blocklistUrls", blocklistUrls);
-
-      // Extract domains from blocklist, filtering out invalid lines
       const blocklistDomains = new Set(
         blocklistUrls
           .map((line) => {
             const parts = line.split(/\s+/);
-            return parts.length > 1 ? parts[1] : null; // Extract domain if it exists
+            return parts.length > 1 ? parts[1] : null; // Extract domain
           })
           .filter(Boolean) // Remove null/undefined entries
       );
 
-      // Initialize sets for new blocklist and existing blocklist entries
-      const expandedBlocklistUrls = new Set();
-      const existingBlocklistUrls = new Set(
-        currentHosts
-          .filter((line) => line.startsWith(CORRECT_FORMAT_PREFIX))
-          .map((line) => {
-            const parts = line.split(/\s+/);
-            return parts.length > 1 ? parts[1] : null;
-          })
-          .filter(Boolean) // Remove null/undefined entries
-      );
+      // Extract existing blocklist section
+      const existingBlocklistStartIndex = currentHosts.indexOf(BLOCKLIST_START);
+      const existingBlocklistEndIndex = currentHosts.indexOf(BLOCKLIST_END);
 
-      // Normalize domain function
-      const normalizeDomain = (domain) => domain.replace(/^www\./, "");
+      let existingBlocklist = new Set();
+      if (
+        existingBlocklistStartIndex !== -1 &&
+        existingBlocklistEndIndex !== -1
+      ) {
+        for (
+          let i = existingBlocklistStartIndex + 1;
+          i < existingBlocklistEndIndex;
+          i++
+        ) {
+          const parts = currentHosts[i].split(/\s+/);
+          if (parts.length > 1) existingBlocklist.add(parts[1]); // Extract domain
+        }
+      }
 
-      // Process blocklist domains
+      // Merge blocklist: Add only new domains
+      const updatedBlocklist = new Set([...existingBlocklist]);
       blocklistDomains.forEach((domain) => {
-        if (!domain) return; // Skip invalid domains
-
         const normalizedDomain = normalizeDomain(domain);
         const wwwDomain = `www.${normalizedDomain}`;
 
-        // Ensure target.com and www.target.com are not added
-        if (
-          normalizedDomain === "target.com" ||
-          wwwDomain === "www.target.com"
-        ) {
-          console.log(`Skipping target.com to avoid accidental blocking.`);
-          return;
+        // Add both "www." and non-"www." versions if they are not already present
+        if (!updatedBlocklist.has(normalizedDomain)) {
+          updatedBlocklist.add(normalizedDomain);
         }
-
-        // Add only if neither version is in the existing blocklist
-        if (
-          !existingBlocklistUrls.has(normalizedDomain) &&
-          !existingBlocklistUrls.has(wwwDomain)
-        ) {
-          expandedBlocklistUrls.add(
-            `${CORRECT_FORMAT_PREFIX} ${normalizedDomain}`
-          );
-          expandedBlocklistUrls.add(`${CORRECT_FORMAT_PREFIX} ${wwwDomain}`);
+        if (!updatedBlocklist.has(wwwDomain)) {
+          updatedBlocklist.add(wwwDomain);
         }
       });
 
-      // Separate existing hosts into non-blocklist and blocklist categories
-      const nonBlocklistUrls = [];
-      currentHosts.forEach((line) => {
-        const normalizedLine = line.replace(/\s+/g, " ").trim();
-        const [ip, domain] = normalizedLine.split(" ");
-
-        if (!domain || normalizedLine.startsWith("#")) {
-          // Preserve comments or empty lines
-          nonBlocklistUrls.push(line);
-        } else if (
-          blocklistDomains.has(domain) ||
-          blocklistDomains.has(normalizeDomain(domain))
-        ) {
-          // Skip existing blocklist entries
-        } else {
-          // Preserve non-blocklist entries
-          nonBlocklistUrls.push(line);
-        }
-      });
-
-      // Combine blocklist entries into the correct format
+      // Format blocklist for hosts file
       const blocklistSection = [
         BLOCKLIST_START,
-        ...Array.from(expandedBlocklistUrls),
+        ...Array.from(updatedBlocklist).map(
+          (domain) => `${CORRECT_FORMAT_PREFIX} ${domain}`
+        ),
         BLOCKLIST_END,
-      ].join("\n");
+      ];
 
-      // Write the new hosts file content
-      const newHostsContent = [
-        ...nonBlocklistUrls, // Retain preserved non-blocklist entries
-        blocklistSection, // Add the new blocklist section
-      ].join("\n");
-
-      window.electron.rewriteHosts(newHostsContent); // Send to backend
-      console.log(
-        "Hosts file rewritten with blocklist demarcated, corrected, and cleaned."
+      // Rebuild hosts file
+      const nonBlocklistLines = currentHosts.filter(
+        (line, index) =>
+          index < existingBlocklistStartIndex ||
+          index > existingBlocklistEndIndex
       );
-      updateUI(true);
-    } else {
-      // Only write the blocklist section with proper formatting
-      const blocklistContent = [
-        BLOCKLIST_START,
-        ...window.electron.getBlocklistUrls(),
-        BLOCKLIST_END,
-      ].join("\n");
-      window.electron.rewriteHostsFile(blocklistContent);
-      console.log("Hosts file rewritten with only the blocklist section.");
+      const newHostsContent = [...nonBlocklistLines, ...blocklistSection].join(
+        "\n"
+      );
+
+      return await new Promise((resolve, reject) => {
+        window.electron.rewriteHosts(newHostsContent, (success, response) => {
+          if (success) {
+            resolve(response);
+          } else {
+            reject(
+              new Error(response.message || "Failed to rewrite hosts file.")
+            );
+          }
+        });
+      });
+    } catch (error) {
+      console.error("Error in updateHostsFile:", error);
+      throw new Error("Failed to rewrite the hosts file.");
     }
   }
 

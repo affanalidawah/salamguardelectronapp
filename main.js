@@ -100,10 +100,6 @@ app.on("ready", () => {
     });
     const customUrls = readJsonFile(customUrlsPath);
     mainWindow.webContents.send("update-custom-list", customUrls); // Send initial list
-
-    // checkBlocklistIntegrity((blocked) => {
-    //   mainWindow.webContents.send("check-haram-status", blocked);
-    // });
   });
 
   mainWindow.loadFile(path.join(__dirname, "renderer/index.html"));
@@ -117,7 +113,17 @@ ipcMain.on("check-blocklist-integrity", (event) => {
 
 ipcMain.on("rewrite-hosts", (event, content) => {
   writeSafelyToHosts(content, (success, message) => {
-    event.reply("rewrite-hosts-result", success, message);
+    if (success) {
+      // Recheck blocklist integrity after successful update
+      checkBlocklistIntegrity((isValid, result) => {
+        event.reply("block-haram-success", {
+          success: true,
+          result: result || { message: "Blocklist successfully updated." },
+        });
+      });
+    } else {
+      event.reply("block-haram-success", { success: false, message });
+    }
   });
 });
 
@@ -125,8 +131,9 @@ ipcMain.on("rewrite-hosts", (event, content) => {
 ipcMain.on("block-haram-content", (event) => {
   appendBlocklist(event, (success, message) => {
     if (success) {
-      checkBlocklistIntegrity((blocked) => {
-        event.reply("block-haram-success", { success: true, blocked });
+      // Recheck blocklist integrity after successful update
+      checkBlocklistIntegrity((isValid, result) => {
+        event.reply("block-haram-success", { success: true, result });
       });
     } else {
       event.reply("block-haram-success", { success: false, message });

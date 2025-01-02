@@ -20,10 +20,6 @@ contextBridge.exposeInMainWorld("electron", {
   onUpdateCustomList: (callback) =>
     ipcRenderer.on("update-custom-list", (_, args) => callback(args)),
   blockHaramContent: () => ipcRenderer.send("block-haram-content"),
-  onUpdateProgress: (callback) =>
-    ipcRenderer.on("update-progress", (_, current, total) =>
-      callback(current, total)
-    ),
   onBlocklistSuccess: (callback) =>
     ipcRenderer.on("blocklist-success", (_, message) => callback(message)),
   onBlocklistError: (callback) =>
@@ -39,7 +35,10 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.on("blocklist-integrity-status", (_, isValid, result) =>
       callback(isValid, result)
     ),
-  rewriteHosts: (content) => {
+  rewriteHosts: (content, callback) => {
+    ipcRenderer.once("block-haram-success", (_, response) => {
+      callback(response.success, response);
+    });
     ipcRenderer.send("rewrite-hosts", content);
   },
   onRewriteHostsResult: (callback) => {

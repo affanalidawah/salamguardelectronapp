@@ -25,66 +25,118 @@ const specificUrls = [
   "xvideos.com",
 ];
 
-const checkBlocklistIntegrity = (callback) => {
-  fs.readFile(hostsPath, "utf-8", (err, data) => {
-    if (err) {
-      console.error("Error reading hosts file:", err);
-      return callback(false, { error: "Failed to read hosts file." });
-    }
+const checkBlocklistIntegrity = async (callback) => {
+  try {
+    const blocklist = await fetchBlocklistFromGitHub();
 
-    const startFound = data.includes(markerStart);
-    const endFound = data.includes(markerEnd);
-    // Split data into lines and trim whitespace
-    const dataLines = data
-      .split("\n")
-      .map((line) => line.replace(/\s+/g, " ").trim());
+    // Normalize blocklist domains
+    const normalizedBlocklist = new Set(
+      blocklist
+        .filter((entry) => entry && typeof entry === "string") // Remove undefined or non-string entries
+        .map((entry) =>
+          entry
+            .split(/\s+/)[1]
+            ?.replace(/^www\./, "")
+            .trim()
+        )
+        .filter(Boolean) // Remove any undefined results from split/map
+    );
 
-    const urlsFound = specificUrls.every((url) => {
-      const entry1 = `127.0.0.1 ${url}`;
-      const entry2 = `0.0.0.0 ${url}`;
-
-      // Check each line for an exact match
-      const found = dataLines.some(
-        (line) => line === entry1 || line === entry2
-      );
-
-      if (!found) {
-        console.log(`URL not found: ${url}`);
-        console.log(`Checking for: '${entry1}' or '${entry2}'`);
+    // read hosts
+    fs.readFile(hostsPath, "utf-8", (err, data) => {
+      if (err) {
+        console.error("Error reading hosts file:", err);
+        return callback(false, { error: "Failed to read hosts file." });
       }
 
-      return found;
-    });
+      const startFound = data.includes(markerStart);
+      const endFound = data.includes(markerEnd);
+      // Split data into lines and trim whitespace
+      const dataLines = data
+        .split("\n")
+        .map((line) => line.replace(/\s+/g, " ").trim());
 
-    if (startFound && endFound && urlsFound) {
-      // Case 3: Comments and specific URLs are there
-      callback(true, {
-        status: 3,
-        message: "✔ Haram content is successfully blocked.",
+      // Collect existing hosts entries (normalized)
+      const normalizedHostsEntries = new Set(
+        dataLines
+          .filter((line) => line.startsWith("127.0.0.1"))
+          .flatMap((line) => {
+            const [_, domain] = line.split(" ");
+            return domain.startsWith("www.")
+              ? [domain.replace(/^www\./, ""), domain]
+              : [domain, `www.${domain}`];
+          })
+      );
+
+      // Check if all blocklist domains are present and log missing ones
+      const missingDomains = [...normalizedBlocklist].flatMap((domain) => {
+        const wwwDomain = domain.startsWith("www.") ? domain : `www.${domain}`;
+        const nonWwwDomain = domain.replace(/^www\./, "");
+        const missing = [];
+
+        // Check both "www." and non-"www." versions
+        if (!normalizedHostsEntries.has(nonWwwDomain))
+          missing.push(nonWwwDomain);
+        if (!normalizedHostsEntries.has(wwwDomain)) missing.push(wwwDomain);
+
+        return missing;
       });
-    } else if (startFound && endFound && !urlsFound) {
-      // Case 1: Comments are there, but specific URLs are not
-      console.log("Blocklist markers exist, but specific URLs are missing.");
-      callback(false, {
-        status: 1,
-        message: "Your Blocklist needs an update.",
+
+      if (missingDomains.length > 0) {
+        console.log("The following domains are missing in the hosts file:");
+        missingDomains.forEach((domain) => console.log(domain));
+      } else {
+        console.log("All blocklist domains are present in the hosts file.");
+      }
+
+      // Determine if all URLs are found
+      const allUrlsFound = missingDomains.length === 0;
+
+      const urlsFound = specificUrls.every((url) => {
+        const entry1 = `127.0.0.1 ${url}`;
+        const entry2 = `0.0.0.0 ${url}`;
+
+        // Check each line for an exact match
+        const found = dataLines.some(
+          (line) => line === entry1 || line === entry2
+        );
+
+        return found;
       });
-    } else if (!startFound && !endFound && urlsFound) {
-      // Case 2: Comments are not there, but specific URLs are
-      console.log("Specific URLs found, but blocklist markers are missing.");
-      callback(false, {
-        status: 2,
-        message: "Your Blocklist needs fixing.",
-      });
-    } else if (!startFound && !endFound && !urlsFound) {
-      // Case 4: Neither comments nor specific URLs are there
-      console.log("No blocklist or specific URLs found.");
-      callback(false, {
-        status: 4,
-        message: "Your computer is unprotected.",
-      });
-    }
-  });
+
+      if (startFound && endFound && allUrlsFound) {
+        // Case 3: Comments and specific URLs are there
+        callback(true, {
+          status: 3,
+          message: "Haram content is successfully blocked.",
+        });
+      } else if (startFound && endFound && !allUrlsFound) {
+        // Case 1: Comments are there, but specific URLs are not
+        console.log("Blocklist markers exist, but update is needed.");
+        callback(false, {
+          status: 1,
+          message: "Your Blocklist needs an update.",
+        });
+      } else if (!startFound && !endFound && urlsFound) {
+        // Case 2: Comments are not there, but specific URLs are
+        console.log("Specific URLs found, but blocklist markers are missing.");
+        callback(false, {
+          status: 2,
+          message: "Your Blocklist needs patching.",
+        });
+      } else if (!startFound && !endFound && !urlsFound) {
+        // Case 4: Neither comments nor specific URLs are there
+        console.log("No blocklist or specific URLs found.");
+        callback(false, {
+          status: 4,
+          message: "Your computer is unprotected.",
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Failed to check blocklist integrity:", error);
+    callback(false, { error: "Error fetching or processing blocklist." });
+  }
 };
 
 // Fetch blocklist from GitHub
@@ -142,6 +194,15 @@ const appendBlocklist = async (event, callback) => {
   const batchSize = 500;
   let currentBatch = 0;
 
+  // Send progress updates only if `event` is provided
+  if (event && event.sender && typeof event.sender.send === "function") {
+    event.sender.send(
+      "update-progress",
+      Math.min(currentProgress, totalEntries),
+      totalEntries
+    );
+  }
+
   const writeBatch = () => {
     const batch = cleanedEntries
       .slice(currentBatch * batchSize, (currentBatch + 1) * batchSize)
@@ -152,13 +213,6 @@ const appendBlocklist = async (event, callback) => {
 
     currentBatch++;
     currentProgress += batchSize;
-
-    // Send progress updates to the renderer process
-    event.sender.send(
-      "update-progress",
-      Math.min(currentProgress, totalEntries),
-      totalEntries
-    );
 
     if (currentBatch * batchSize < totalEntries) {
       setImmediate(writeBatch);
@@ -189,12 +243,33 @@ const executeAppendCommand = (tempFile, callback, event) => {
   sudo.exec(appendCommand, { name: "SalamGuard" }, (error) => {
     if (error) {
       console.error("Failed to append blocklist:", error);
-      event.sender.send("blocklist-error", "Failed to append blocklist.");
+      if (event && event.sender) {
+        event.sender.send("blocklist-error", "Failed to append blocklist.");
+      }
       return callback(false, "Failed to append blocklist.");
     }
 
-    event.sender.send("blocklist-success", "Blocklist appended successfully.");
-    callback(true, "Blocklist appended successfully.");
+    // Recheck the blocklist integrity before sending success message
+    if (event && event.sender) {
+      event.sender.send(
+        "blocklist-progress",
+        "Rechecking blocklist integrity..."
+      );
+    }
+    checkBlocklistIntegrity((isValid, result) => {
+      if (isValid && result.status === 3) {
+        event.sender.send(
+          "blocklist-success",
+          "Blocklist appended successfully."
+        );
+        callback(true, "Blocklist appended successfully.");
+      } else {
+        if (event && event.sender) {
+          event.sender.send("blocklist-error", "Blocklist update incomplete.");
+        }
+        callback(false, "Blocklist update incomplete.");
+      }
+    });
   });
 };
 

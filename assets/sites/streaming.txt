@@ -1,0 +1,12 @@
+netflix.com
+hulu.com
+disneyplus.com
+hbo.com/
+peacocktv.com
+paramountplus.com
+crunchyroll.com
+spotify.com
+soundcloud.com
+deezer.com
+twitch.tv
+pandora.com
