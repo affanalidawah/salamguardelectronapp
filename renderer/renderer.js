@@ -9,50 +9,47 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalMessage = document.getElementById("modal-message");
   const modalClose = document.getElementById("modal-close");
 
+  const BLOCKLIST_START = "# SalamGuard Blocklist Start";
+  const BLOCKLIST_END = "# SalamGuard Blocklist End";
+  const CORRECT_FORMAT_PREFIX = "127.0.0.1";
+
+  let isHaramBlocked = false;
+  let modalProgressBar;
+
+  // fetch data
+
+  window.electron.checkBlocklistIntegrity();
+
+  window.electron.onUpdateCustomList(renderCustomUrls);
+
+  window.electron.receiveInitialConfig((config) => {
+    isHaramBlocked = config.haramBlocked;
+  });
+
   async function getHostsContent() {
     try {
       const hostsContent = await window.electron.readHostsFile();
-      // console.log("Hosts File Content:", hostsContent);
-      console.log("Type of currentHosts:", typeof hostsContent);
-      console.log("currentHosts content:", hostsContent);
-      return hostsContent; // Return the content for use elsewhere
+      return hostsContent;
     } catch (error) {
       console.error("Failed to read hosts file:", error);
-      throw error; // Rethrow error if needed
+      throw error;
     }
   }
 
   async function fetchAndDisplayBlocklist() {
     try {
       const blocklist = await window.electron.getBlocklistUrls();
-      console.log("Fetched Blocklist:", blocklist);
       return blocklist;
-      // You can now use this blocklist in your app
     } catch (error) {
       console.error("Failed to fetch blocklist:", error);
       throw error;
     }
   }
 
-  window.electron.onRewriteHostsResult((success, message) => {
-    if (success) {
-      console.log("Hosts file successfully rewritten.");
-      showModal("✔ Successfully updated the hosts file.", false); // Reflect success
-    } else {
-      console.error("Failed to update hosts file:", message);
-      showModal(`❌ Failed to update the hosts file. ${message}`, false); // Reflect failure
-    }
-  });
-
-  // State Variables
-  let isHaramBlocked = false;
-  let modalProgressBar;
-
-  // Utility: Show Modal Notification with Progress Bar Option
-  let isLoading = false;
+  // ui
 
   function showModal(message, showProgress = false, hideCloseButton = false) {
-    isLoading = true; // Set loading state to true
+    console.log("showModal called with message:", message);
     modalMessage.textContent = message;
     if (showProgress) {
       if (!modalProgressBar) {
@@ -67,30 +64,25 @@ document.addEventListener("DOMContentLoaded", () => {
       modalProgressBar?.classList.add("hidden");
     }
 
-    // Control the visibility of the close button
     if (hideCloseButton) {
       modalClose.classList.add("hidden");
     } else {
       modalClose.classList.remove("hidden");
     }
-
     modal.classList.remove("hidden");
   }
 
   const closeModal = () => {
-    isLoading = false; // Set loading state to false
     modal.classList.add("hidden");
     modal.classList.remove("show-progress");
   };
 
-  // Utility: Update Progress Bar
-  function updateProgressBar(current, total) {
-    if (modalProgressBar) {
-      modalProgressBar.value = Math.round((current / total) * 100);
-    }
-  }
+  // Event: Close Modal
+  modalClose.addEventListener("click", () => {
+    modal.classList.add("hidden");
+    modalProgressBar?.classList.add("hidden");
+  });
 
-  // Utility: Render Block Section
   function renderBlockSection(isBlocked, message, action = null) {
     if (isBlocked) {
       blockSection.innerHTML = `
@@ -118,24 +110,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Consolidated UI update function
   function updateUI(isBlocked = isHaramBlocked, message = "", action = null) {
-    console.log("updateUI() triggered with message:", message);
+    console.log("updateUI called with:", { isBlocked, message, action });
     if (isBlocked) {
-      renderBlockSection(
-        true,
-        message || "Haram content is blocked on this computer."
-      );
+      renderBlockSection(true, message || "Your computer is protected.");
     } else {
       renderBlockSection(
         false,
-        message || "Haram content is not blocked on this computer.",
+        message || "Your computer is unprotected.",
         action || {
           buttonId: "block-haram",
           buttonText: "Block Haram Content",
           onClick: () => {
             showModal(
-              "Blocking haram content... Please enter your password.",
+              "Blocking haram content... Please enter your password and wait a moment.",
               true,
               true
             );
@@ -145,12 +133,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
   }
-
-  // Event: Close Modal
-  modalClose.addEventListener("click", () => {
-    modal.classList.add("hidden");
-    modalProgressBar?.classList.add("hidden");
-  });
 
   // Validate URL
   function validateDomain(domain) {
@@ -208,155 +190,87 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Electron IPC Handlers
-  window.electron.onBlocklistSuccess((message) => {
-    console.log("Blocklist append success received. Message:", message);
-
-    // Show progress modal while rechecking
-    showModal("Rescanning your computer...", true, true);
-
-    // Trigger integrity check
-    window.electron.checkBlocklistIntegrity();
-
-    // Handle integrity check result
-    window.electron.onBlocklistIntegrityStatus((isValid, result) => {
-      console.log("Blocklist integrity status after appending:", result);
-
-      const statusMessage =
-        result.status === 3
-          ? "✔ Successfully blocked over 80,000 websites."
-          : "❌ Blocklist update incomplete.";
-
-      // Update UI before showing modal
-      updateUI(result.status === 3, result.message || statusMessage);
-
-      // Show modal after updating the UI
-      showModal(statusMessage, false);
-    });
-  });
-
   window.electron.onBlocklistError((error) => {
     modalMessage.textContent = error;
     modalProgressBar?.classList.add("hidden");
   });
+
   window.electron.onBlockHaramSuccess((response) => {
-    console.log("BlockHaramSuccess triggered. Response:", response);
-    modal.classList.add("hidden");
-
     if (response.success) {
-      console.log("Blocking succeeded. Rechecking blocklist integrity...");
-
-      // Recheck the blocklist integrity and update state immediately
       window.electron.checkBlocklistIntegrity();
-
       window.electron.onBlocklistIntegrityStatus((isValid, result) => {
-        console.log("Blocklist integrity status after blocking:", result);
-
         if (result.status === 3) {
-          isHaramBlocked = true; // Update state to blocked
+          isHaramBlocked = true;
+          modal.classList.add("hidden");
           showModal("Your computer is now protected.");
         } else {
-          isHaramBlocked = false; // Update state to unblocked
+          isHaramBlocked = false;
+          modal.classList.add("hidden");
           showModal(
-            "❌ Error: We were unable to secure your computer. Please try again or contact us for help."
+            "❌ Error: There was a problem. Please make sure you are connected to the internet and try again. Feel free to email us for help."
           );
         }
 
-        updateUI(); // Reflect the new state in the UI
+        updateUI();
       });
     } else {
+      modal.classList.add("hidden");
       showModal(`❌ Error: ${response.message}`);
     }
   });
 
-  // Keep the custom list rendering and initial config handling as is
-  window.electron.onUpdateCustomList(renderCustomUrls);
-
-  window.electron.receiveInitialConfig((config) => {
-    console.log("Received initial config:", config);
-
-    isHaramBlocked = config.haramBlocked;
-  });
-
-  const setLoadingState = (isLoading) => {
-    const loadingIndicator = document.getElementById("loading-indicator");
-    if (isLoading) {
-      loadingIndicator.classList.remove("hidden");
-    } else {
-      loadingIndicator.classList.add("hidden");
-    }
-  };
-
   // Check Blocklist Integrity
-  window.electron.checkBlocklistIntegrity();
   window.electron.onBlocklistIntegrityStatus((isValid, result) => {
-    console.log("Blocklist integrity check triggered:");
-    console.log("Result object:", JSON.stringify(result, null, 2));
-
-    // Default fallback message
-    const defaultMessage =
-      "An issue was detected. Please update the blocklist.";
+    const defaultMessage = "An issue was detected.";
     const message = result?.message || defaultMessage;
 
-    // Update the state based on result status
     switch (result?.status) {
-      case 3:
-        isHaramBlocked = true; // Blocklist markers and specific URLs are present
+      case 3: // Blocklist markers and specific URLs are present
+        isHaramBlocked = true;
         updateUI(true, message);
-        closeModal(); // Ensure modal closes after UI is updated
-        console.log("Mission Success! Case 3");
+        closeModal();
         break;
-      case 1:
-        // Case 1: Blocklist needs rewriting
+      case 1: // Case 1: Blocklist needs rewriting
         isHaramBlocked = false;
         updateUI(false, message, {
           buttonId: "rewrite-blocklist",
           buttonText: "Update Blocklist",
           onClick: async () => {
-            showModal("Blocking more sites... please wait", true, true);
+            showModal(
+              "Blocking more sites... please enter your password and wait",
+              true,
+              true
+            );
             try {
               const response = await updateHostsFile();
-              showModal("✔ Successfully updated blocklist.", false);
-              updateUI(
-                true,
-                response.message || "Blocklist updated successfully."
-              );
             } catch (error) {
               showModal(`❌ Error: ${error.message}`, false);
-            } finally {
-              closeModal();
             }
           },
         });
-        console.log("We need to rewrite hosts!");
         break;
-      case 2:
-        isHaramBlocked = false; // Blocklist needs rewriting
+      case 2: // Blocklist needs rewriting
+        isHaramBlocked = false;
         updateUI(false, message, {
           buttonId: "rewrite-blocklist",
           buttonText: "Update Blocklist",
           onClick: async () => {
-            setLoadingState(true); // Show loading indicator
-
+            showModal(
+              "Patching your security... please enter your password and wait",
+              true,
+              true
+            );
             try {
-              const response = await rewriteHostsFile(true); // Perform async operation
-              updateUI(
-                true,
-                response.message || "Blocklist updated successfully."
-              );
+              const response = await rewriteHostsFile(true);
             } catch (error) {
               updateUI(false, `Error: ${error.message}`);
-            } finally {
-              setLoadingState(false); // Hide loading indicator
             }
           },
         });
-        console.log("We need to rewrite hosts!");
         break;
-      default:
-        // Default case: No protection
+      default: // Default case: No protection
         isHaramBlocked = false;
-        updateUI(false, "Haram content is not blocked on this computer.", {
+        updateUI(false, "Your computer is not protected from Haram Content.", {
           buttonId: "block-haram",
           buttonText: "Block Haram Content",
           onClick: async () => {
@@ -367,29 +281,20 @@ document.addEventListener("DOMContentLoaded", () => {
             );
             try {
               const response = await window.electron.blockHaramContent();
-              showModal("✔ Successfully blocked haram content.", false);
-              updateUI(
-                true,
-                response.message || "Blocklist updated successfully."
-              );
             } catch (error) {
-              showModal(`❌ Error: ${error.message}`, false);
-            } finally {
-              closeModal();
+              const errorMessage =
+                (error && error.message) || "An unexpected error occurred.";
+              showModal(`❌ Error case default: ${errorMessage}`, false);
+              console.log(error, error.message);
             }
           },
         });
         break;
     }
-
-    console.log("isHaramBlocked state:", isHaramBlocked);
   });
+
   async function rewriteHostsFile(preserveUrls) {
     try {
-      const BLOCKLIST_START = "# SalamGuard Blocklist Start";
-      const BLOCKLIST_END = "# SalamGuard Blocklist End";
-      const CORRECT_FORMAT_PREFIX = "127.0.0.1";
-
       let newHostsContent;
 
       if (preserveUrls) {
@@ -494,10 +399,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function updateHostsFile() {
-    const BLOCKLIST_START = "# SalamGuard Blocklist Start";
-    const BLOCKLIST_END = "# SalamGuard Blocklist End";
-    const CORRECT_FORMAT_PREFIX = "127.0.0.1";
-
     const normalizeDomain = (domain) => domain.replace(/^www\./, "");
 
     try {

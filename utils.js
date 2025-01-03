@@ -1,6 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 
+const hostsPath =
+  process.platform === "win32"
+    ? "C:\\Windows\\System32\\drivers\\etc\\hosts"
+    : "/etc/hosts";
+
 // Ensure required files exist with default values
 function ensureFileExists(filePath, defaultValue) {
   if (!fs.existsSync(filePath)) {
@@ -34,4 +39,5 @@ module.exports = {
   readJsonFile,
   writeJsonFile,
   customUrlsPath,
+  hostsPath,
 };

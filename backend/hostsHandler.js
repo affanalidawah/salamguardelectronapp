@@ -3,17 +3,17 @@ const path = require("path");
 const sudo = require("sudo-prompt");
 const axios = require("axios");
 
-const hostsPath =
-  process.platform === "win32"
-    ? "C:\\Windows\\System32\\drivers\\etc\\hosts"
-    : "/etc/hosts";
-
 const githubBlocklistUrl =
   "https://raw.githubusercontent.com/4skinSkywalker/Anti-Porn-HOSTS-File/refs/heads/master/HOSTS.txt";
 
 const markerStart = "# SalamGuard Blocklist Start";
 const markerEnd = "# SalamGuard Blocklist End";
-const { readJsonFile, writeJsonFile, customUrlsPath } = require("../utils");
+const {
+  readJsonFile,
+  writeJsonFile,
+  customUrlsPath,
+  hostsPath,
+} = require("../utils");
 
 const specificUrls = [
   "exampleadultsite.com",
@@ -161,16 +161,13 @@ const fetchBlocklistFromGitHub = async () => {
   }
 };
 
-// Append blocklist and clean up invalid entries
 const appendBlocklist = async (event, callback) => {
   const githubBlocklist = await fetchBlocklistFromGitHub();
 
-  // Ensure "exampleadultsite.com" is included
   if (!githubBlocklist.includes("exampleadultsite.com")) {
     githubBlocklist.push("exampleadultsite.com");
   }
 
-  // Clean up entries: Ignore IPs like 0.0.0.0 and extract only domains
   const cleanedEntries = githubBlocklist
     .map((line) => {
       const parts = line.split(/\s+/); // Split line by spaces
@@ -180,7 +177,6 @@ const appendBlocklist = async (event, callback) => {
     .filter((domain) => domain && !domain.startsWith("0.0.0.0")); // Exclude empty and invalid entries
 
   if (cleanedEntries.length === 0) {
-    console.error("Blocklist is empty or invalid.");
     return callback(false, "Blocklist is empty or invalid.");
   }
 
@@ -193,15 +189,6 @@ const appendBlocklist = async (event, callback) => {
 
   const batchSize = 500;
   let currentBatch = 0;
-
-  // Send progress updates only if `event` is provided
-  if (event && event.sender && typeof event.sender.send === "function") {
-    event.sender.send(
-      "update-progress",
-      Math.min(currentProgress, totalEntries),
-      totalEntries
-    );
-  }
 
   const writeBatch = () => {
     const batch = cleanedEntries
@@ -225,7 +212,6 @@ const appendBlocklist = async (event, callback) => {
   writeBatch();
 };
 
-// Execute append command
 const executeAppendCommand = (tempFile, callback, event) => {
   const appendCommand =
     process.platform === "win32"
@@ -248,28 +234,7 @@ const executeAppendCommand = (tempFile, callback, event) => {
       }
       return callback(false, "Failed to append blocklist.");
     }
-
-    // Recheck the blocklist integrity before sending success message
-    if (event && event.sender) {
-      event.sender.send(
-        "blocklist-progress",
-        "Rechecking blocklist integrity..."
-      );
-    }
-    checkBlocklistIntegrity((isValid, result) => {
-      if (isValid && result.status === 3) {
-        event.sender.send(
-          "blocklist-success",
-          "Blocklist appended successfully."
-        );
-        callback(true, "Blocklist appended successfully.");
-      } else {
-        if (event && event.sender) {
-          event.sender.send("blocklist-error", "Blocklist update incomplete.");
-        }
-        callback(false, "Blocklist update incomplete.");
-      }
-    });
+    callback(true, "Blocklist appended successfully.");
   });
 };
 
@@ -288,7 +253,6 @@ const writeSafelyToHosts = (
 
   try {
     fs.writeFileSync(tempFile, content);
-    console.log("Temporary file created:", tempFile); // Debug log
   } catch (err) {
     console.error("Error writing to temp file:", err);
     return callback(false, "Failed to prepare the updated hosts file.");
@@ -316,8 +280,6 @@ const addCustomUrl = (url, callback) => {
   const cleanDomain = url.replace(/^www\./, "").trim();
   const entries = [`127.0.0.1 ${cleanDomain}`, `127.0.0.1 www.${cleanDomain}`];
 
-  console.log("Adding entries to hosts file:", entries);
-
   fs.readFile(hostsPath, "utf-8", (err, data) => {
     if (err) {
       console.error("Failed to read the hosts file:", err);
@@ -331,10 +293,6 @@ const addCustomUrl = (url, callback) => {
 
     const updatedHosts = `${data.trim()}\n${entries.join("\n")}\n`;
 
-    console.log(
-      "sent content from hostsHandler.js 258 to writeSafelyToHosts:",
-      updatedHosts
-    );
     writeSafelyToHosts(updatedHosts, (success, message) => {
       console.log("Write to hosts file result:", { success, message });
       if (success) {
@@ -377,10 +335,6 @@ const removeCustomUrl = (url, callback) => {
       )
       .join("\n");
 
-    console.log(
-      "sent content from hostsHandler.js 304 to writeSafelyToHosts:",
-      updatedContent
-    );
     writeSafelyToHosts(
       updatedContent,
       callback,

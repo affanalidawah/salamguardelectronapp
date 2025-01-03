@@ -15,6 +15,7 @@ const {
   readJsonFile,
   writeJsonFile,
   customUrlsPath,
+  hostsPath,
 } = require("./utils");
 
 const githubBlocklistUrl =
@@ -58,14 +59,12 @@ app.on("ready", () => {
     }
   };
 
-  // Handle IPC request for blocklist
   ipcMain.handle("get-blocklist", async () => {
     return await fetchBlocklistFromGitHub();
   });
 
   ipcMain.handle("read-hosts-file", async () => {
     try {
-      const hostsPath = path.resolve("/etc/hosts"); // Use `C:\\Windows\\System32\\drivers\\etc\\hosts` for Windows
       const hostsContent = fs.readFileSync(hostsPath, "utf-8");
       return hostsContent;
     } catch (error) {
@@ -127,11 +126,9 @@ ipcMain.on("rewrite-hosts", (event, content) => {
   });
 });
 
-// IPC: Start blocking haram content
 ipcMain.on("block-haram-content", (event) => {
   appendBlocklist(event, (success, message) => {
     if (success) {
-      // Recheck blocklist integrity after successful update
       checkBlocklistIntegrity((isValid, result) => {
         event.reply("block-haram-success", { success: true, result });
       });
@@ -146,12 +143,9 @@ ipcMain.on("add-custom-url", (event, url) => {
   console.log("Received request to add URL:", url);
 
   addCustomUrl(url, (success, message) => {
-    console.log("Add custom URL result:", { success, message });
-
     if (success) {
       const customUrls = readJsonFile(customUrlsPath);
-      console.log("Updated custom URLs after addition:", customUrls);
-      event.reply("update-custom-list", customUrls); // Notify the renderer
+      event.reply("update-custom-list", customUrls);
     }
 
     event.reply("notify", { success, message });
